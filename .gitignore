@@ -1,0 +1,6 @@
+.py-*arm64
+.py-*amd64
+*.sw?
+*.orig
+*.egg-info
+__pycache__
