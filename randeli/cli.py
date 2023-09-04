@@ -2,27 +2,44 @@
 
 import os
 import sys
-import configparser
+import configobj
 import pathlib
+import json
 
 import logging
 import logging.config
 
 import click
 
-from loguru import logger
-
 import randeli
 from randeli.librandeli.trace import tracer as FTRACE 
 
-configparser.DEFAULTSECT = "global"
+configobj.DEFAULTSECT = "global"
 randeli.librandeli.setup_extended_log_levels()
 logging.config.dictConfig( randeli.LOGGING )
+
+LOGGER = logging.getLogger("r.cli")
+DEVLOG = logging.getLogger("d.devel")
+
+
+def write_config_value_to_file(key, value, file):
+    """Write a period-separated key and value to configuration file"""
+
+    config = configobj.ConfigObj(infile=file, create_empty=True, write_empty_values=True)
+
+    k = key.split(".")
+
+    config[k[0]][k[1]] = value
+
+    config.write()
+
+    return config[k[0]][k[1]]
+
 
 @click.group()
 @click.pass_context
 @click.option('--verbose', '-v', type=int, help="Set system-wide verbosity")
-@click.option('--devel', is_flag=True, help="Run in development mode (additional loggin)")
+@click.option('--devel', is_flag=True, help="Run in development mode (additional logging)")
 @click.option('--cfg',
     type=click.Path(),
     required=False,
@@ -33,38 +50,49 @@ logging.config.dictConfig( randeli.LOGGING )
     default="apryse",
     help="Select backend PDF library")
 @click.option('--apryse-token', help="API Token for Apryse backend")
-def cli(ctx, verbose, devel, cfg, backend, apryse_token):
+@click.option('--font-map-file', 'font_file', type=click.Path(), help="Load font map from FILE", default="fonts.json")
+def cli(ctx, verbose, devel, cfg, backend, apryse_token, font_file):
 
     ctx.ensure_object(dict)
 
     cfg_path = pathlib.Path(cfg)
 
-    # load default values from ~/.randeli/config.ini
+    # load all values from ~/.randeli/config.ini into ctx
     if cfg_path.exists():
-        config = configparser.ConfigParser( allow_no_value=True)
-        config.read(cfg_path)
-        ctx.obj['backend'] = config.get("global", "backend", fallback="" )
-        ctx.obj['verbose'] = config.get("global", "verbose", fallback=10 )
-        ctx.obj['devel'] = config.get("global", "devel", fallback=False )
-        if config.get("apryse", "token", fallback="") == "NOTSET":
-            ctx.obj['apryse-token'] = ""
+        config = configobj.ConfigObj(infile=str(cfg_path), create_empty=True, write_empty_values=True)
+
+        for k,v in config.dict().items():
+            for vv in v:
+                ctx.obj[f"{k}.{vv}"] = v[vv]
+
+        if config["apryse"].get("token", "") == "NOTSET":
+            ctx.obj['apryse.token'] = ""
         else:
-            ctx.obj['apryse-token'] = config.get("apryse", "token", fallback="")
+            ctx.obj['apryse.token'] = config["apryse"].get("token","")
 
-        #logging.config.fileConfig( cfg_path )
+    if font_file:
+        ctx.obj['policy.font-map-file'] = font_file
 
-    ctx.obj['verbose'] = verbose
-    ctx.obj['devel'] = devel
+    font_path = pathlib.Path(ctx.obj['policy.font-map-file'])
 
+    if not font_path.exists():
+        ctx.obj['policy.font-map-file'] = ""
+
+    if devel is False:
+        # disable d.* logging
+        logging.getLogger("d.devel").setLevel("ERROR")
+        logging.getLogger("d.trace").setLevel("ERROR")
+        
     # overwrite with supplied configs
     if cfg:
-        ctx.obj['cfg'] = cfg
+        ctx.obj['global.cfg'] = cfg
 
     if backend:
-        ctx.obj['backend'] = backend
+        ctx.obj['global.backend'] = backend
 
     if apryse_token:
-        ctx.obj['apryse-token'] = apryse_token
+        ctx.obj['apryse.token'] = apryse_token
+
 
 @cli.command()
 @click.pass_context
@@ -72,65 +100,307 @@ def setup(ctx ):
     """Create the default configuration file"""
 
     ctx.ensure_object(dict)
-    cfg_path = pathlib.Path(ctx.obj['cfg'])
+
+    cfg_path = pathlib.PosixPath(ctx.obj['global.cfg'])
+
     if not cfg_path.exists():
 
-        config = configparser.ConfigParser( allow_no_value=True)
+        config = configobj.ConfigObj(infile=None, write_empty_values=True)
         config["global"] = {}
         config["global"]["backend"] = "apryse"
         config["global"]["verbose"] = 10
-        config["global"]["verbose"] = 10
+        config["global"]["devel"] = False
         config["apryse"] = {}
         config["apryse"]["token"] = "NOTSET"
 
-        with open( cfg_path, 'w') as configfile:
-            config.write(configfile)
+        rules = randeli.policy.Rules()
+        rules.saveRulesToDict(config)
+
+        config.filename = cfg_path
+
+        config.write()
+
     else:
         click.echo("Ignoring setup request; default configuration file exists.")
 
 @cli.command()
-@click.option('--key', 'key_', required=True)
-@click.option('--value', 'value_', required=False)
+@click.option('--key', 'key_')
+@click.option('--value', 'value_')
+@click.argument('verb' )
 @click.pass_context
-def config(ctx, key_, value ):
-    pass
+def config(ctx, key_, value_, verb ):
+    """Read and Write configuration values"""
+
+    if verb == "get":
+        click.echo(ctx.obj[key_])
+
+    elif verb == "set":
+
+        ctx.obj[key_] = value_
+
+        click.echo( write_config_value_to_file( key_, value_,ctx.obj['global.cfg']) )
+
+    elif verb == "list":
+
+        config = configobj.ConfigObj(infile=ctx.obj['global.cfg'],
+                                     create_empty=True,
+                                     write_empty_values=True)
+
+        for k,v in ctx.obj.items():
+            print(f"{k:>32} = {v}")
+
+    else:
+        raise Exception(f"Unknown action '{verb}'")
+
+
+@cli.command()
+@click.option('--font-map-file', 'font_file', metavar="FILE", type=click.Path(), help="Save font mapping to FILE", default="fonts.json")
+@click.option('--font-dir', 'font_dir', metavar="DIR", type=click.Path(exists=True), help="Parse fonts rooted at DIR", required=True, multiple=True)
+@click.option('--fallback-font', 'fallback_font', default="CMU Serif", metavar="NAME", help="Font NAME if font can't be founf mapping" )
+@click.option('--computer-modern', 'cm_alias', metavar="NAME", default="CMU", help="Alias 'Computer Modern' to NAME")
+@click.option('--update-config', 'update_config', is_flag=True, help="Add specified font-map-file into configuration file")
+@click.pass_context
+def map_fonts(ctx, font_file, font_dir, fallback_font, cm_alias, update_config ):
+    """Build a font map from querying each DIR"""
+
+    from fontTools import ttLib
+
+    fonts = {}
+
+    for dir_ in font_dir:
+
+        LOGGER.info(f"Mapping files under {dir_}")
+
+        for root, dirs, files in os.walk(dir_):
+            for filename in files:
+
+                path_to_font = pathlib.PurePosixPath(root, filename)
+
+                if path_to_font.suffix in [".ttf", ".otf", ".ttc" ]:
+                    try:
+                        font_list = [ ttLib.TTFont(str(path_to_font)) ]
+                    except ttLib.TTLibFileIsCollectionError:
+                        font_list = ttLib.TTCollection(str(path_to_font))
+
+                    for font in font_list:
+
+                        family_name = str( font['name'].getDebugName(1) )
+                        style_name = str( font['name'].getDebugName(2) )
+
+                        if family_name not in fonts:
+                            fonts[ family_name ] = {}
+
+                        # Computer Modern's license requires changing the font name for different formats
+                        # (i.e. TeX vs Type1)
+                        if cm_alias in family_name:
+                            if "Computer Modern" not in fonts:
+                                fonts[ "Computer Modern" ] = {}
+                            fonts[ "Computer Modern" ][ style_name ] = str(path_to_font)
+
+                        fonts[ family_name ][ style_name ] = str(path_to_font)
+
+                else:
+                    LOGGER.warn(f"{path_to_font} is not a supported font type")
+
+    with open( font_file, "w") as out:
+        json.dump(fonts, out, indent=2, sort_keys=True)
+
+    if update_config:    
+
+        abs_font_file = pathlib.PosixPath(font_file).absolute()
+
+        click.echo( f"Updated font-map in configuration file to {write_config_value_to_file( 'policy.font-map-file', str(abs_font_file), ctx.obj['global.cfg'])}" )
+
+        if fallback_font in fonts:
+            click.echo( f"Updated fallback-font in configuration file to {write_config_value_to_file( 'policy.fallback-font', fallback_font, ctx.obj['global.cfg'])}" )
 
 @cli.command()
 @click.option('--read', '-i', 'read_', type=click.Path(exists=True), required=True)
-@click.option('--elements', 'elements', is_flag=True, help="Print RLE list of elements", default=False)
-@click.option('--sentances', 'sentances', is_flag=True, help="Print IDs of elements that start sentances", default=False)
 @click.option('--fonts', 'fonts', is_flag=True, help="Print document font details", default=False)
-@click.option('--font-map-file', 'font_file')#, type=click.Path(exists=True), help="Load font map from FILE", default="fonts.json")
-@click.option('--page', 'page', type=int, help="Only analyse PAGE number", default=0)
+@click.option('--page', 'page', type=int, help="Only analyse page PAGE", default=0)
 @click.pass_context
-def inspect(ctx, read_, elements, sentances, fonts, font_file, page ):
+def inspect(ctx, read_, fonts, page ):
+    """Read a PDF and report on its structure"""
 
-    llog = logging.getLogger("r.cli.inspect")
+    ctx.obj['page'] = page
+    ctx.obj['fonts'] = fonts
+    ctx.obj['input'] = read_
 
-    llog.error(f"{ctx.obj['backend']} {ctx.obj['apryse-token']}")
+    @FTRACE
+    def beginPageCB(msg:randeli.librandeli.notify.BeginPage):
+
+        LOGGER.notice(f"Page {msg.page_number} / {msg.page_count}")
+
+    @FTRACE
+    def elementCB(msg:randeli.librandeli.notify.Element):
+
+        if ctx.obj['page'] != 0 and  ctx.obj['page'] != msg.page_number:
+            return
+
+        LOGGER.info(f"Element {msg.ele_idx} {msg.ele_type_str} ({msg.ele_type})")
+
+        if msg.ele_type_str == "image":
+            img = backend.getImageDetails(msg.element)
+            LOGGER.detail(f"  image size = {img['width']} x {img['height']}")
+
+        if msg.ele_type_str == "text":
+            td = backend.getTextDetails(msg.element)
+            LOGGER.detail(f"  text = {td['text']}")
+            if ctx.obj['fonts']:
+                LOGGER.detail(f"  font = {td['font-family']}")
+
+            pass
 
     options = {
-        "apryse-token" : ctx.obj['apryse-token'],
+        "apryse-token" : ctx.obj['apryse.token'],
     }
 
     try:
         backend = randeli.librandeli.backend.Apryse(options)
 
-        backend.notificationCenter().subscribe("OpenDocument",openDocumentCB)
+        backend.notificationCenter().subscribe("BeginPage", beginPageCB)
+        backend.notificationCenter().subscribe("ProcessElement", elementCB)
 
-        backend.loadDocument(read_)
+        backend.loadDocument(ctx.obj['input'])
+
+        backend.processDocument()
+
+        backend.finalise()
+
     except Exception as ex:
-        llog.exception(str(ex),exc_info=ex)
+        LOGGER.exception(str(ex),exc_info=ex)
 
 
+@cli.command()
+@click.option('--read', '-i', 'read_', type=click.Path(exists=True), required=True)
+@click.option('--write', 'write_', type=click.Path(), required=False)
+@click.option('--write-dir', 'write_dir_', type=click.Path(), required=False, help="Save updated file into DIR")
+@click.option('--page', 'page', type=int, help="Only analyse page PAGE", default=0)
+@click.option('--override', 'override', metavar="KEY:VALUE", help="Override config values", multiple=True)
+@click.pass_context
+def update(ctx, read_, write_, write_dir_, page, override ):
+    """Read a PDF and update based on policies"""
 
-@FTRACE
-def openDocumentCB(msg):
+    ctx.obj['input'] = read_
+    ctx.obj['page'] = page
+    ctx.obj['write'] = write_
+    ctx.obj['write_dir'] = write_dir_
 
-    logging.getLogger("r.cli.inspect").notice(f"in openDocumentCB() payload={msg}")
+    for kv in override:
+        s = kv.split(":")
+        ctx.obj[s[0]] = s[1]
+
+    rules = randeli.policy.Rules()
+    rules.loadRulesFromDict( ctx.obj )
+
+    actions = randeli.policy.Actions()
+
+    @FTRACE
+    def beginPageCB(msg:randeli.librandeli.notify.BeginPage):
+
+        LOGGER.notice(f"Page {msg.page_number} / {msg.page_count}")
+
+    @FTRACE
+    def elementCB(msg:randeli.librandeli.notify.Element):
+
+        if ctx.obj['page'] != 0 and ctx.obj['page'] != msg.page_number:
+            #just write out the unmodified object
+            if msg.writer:
+                DEVLOG.info("unmodified")
+                backend.writeElement( msg.writer, msg.element )
+            return
+
+        # TODO OCR
+        # add policy to only ocr large images I.e. full page)
+
+
+        if msg.ele_type_str == "text":
+
+
+            td = backend.getTextDetails(msg.element)
+
+            DEVLOG.info(f"Processing {td['text']}") 
+
+            if rules.shouldMarkup( td['text'] ):
+                LOGGER.debug(f"rules will markup {td['text']}")
+
+                splits = actions.splitWord( td['text'], rules )
+
+                DEVLOG.info( rules.getStrongFontPath(td['font-family'],
+                                                     italic=td['italic'],
+                                                     size=td['font-size']
+                                                    ) )
+
+                # TODO read options from configfile
+                # also support graphical (ocr), not just bolding text
+                opts={
+                    "font-path" : rules.getStrongFontPath(td['font-family'],
+                                                     italic=td['italic'],
+                                                     size=td['font-size']
+                                                    ),
+                    "font-size": rules.getStrongFontSize(td["font-size"]),
+                    #"text-color": (0.0,0.0,1.0)
+                }
+                
+                head_ele = backend.updateTextInElement(
+                    msg.writer, msg.element, splits.head,
+                    style=opts)
+
+                DEVLOG.info(f"head {splits.head}")
+                backend.writeElement( msg.writer, head_ele )
+
+                opts={
+                    "font" : td['font'],
+                    "font-size": td["font-size"],
+                    #"text-color": (0.0,0.0,1.0)
+                }
+                tail_ele = backend.newTextElements(msg.element, msg.builder, splits.tail, style=opts)
+
+                for t in tail_ele:
+                    if t.GetType() == 3:
+                        DEVLOG.info(f"tail {t.GetTextString()}")
+                    else:
+                        DEVLOG.info(f"tail {t.GetType()}")
+
+                    backend.writeElement( msg.writer, t )
+            else:
+                # shouldMarkup == False
+                DEVLOG.info("shouldMarkup==false")
+                backend.writeElement( msg.writer, msg.element )
+
+        else:
+            # on the selected page, but not an element that needs to be updated
+            DEVLOG.info("not text element")
+            backend.writeElement( msg.writer, msg.element )
+
+
+    options = {
+        "apryse-token" : ctx.obj['apryse.token'],
+    }
+
+    try:
+        backend = randeli.librandeli.backend.Apryse(options)
+
+        backend.notificationCenter().subscribe("BeginPage", beginPageCB)
+        backend.notificationCenter().subscribe("ProcessElement", elementCB)
+
+        backend.loadDocument(ctx.obj['input'])
+
+        backend.processDocument( read_only=False )
+
+        args = { }
+        if write_:
+            args["filename" ] = ctx.obj['write']
+        if write_dir_:
+            args["in_dir" ] = ctx.obj['write_dir']
+
+        backend.saveDocument( **args )
+        backend.finalise()
+
+    except Exception as ex:
+        LOGGER.exception(str(ex),exc_info=ex)
 
 
 if __name__ == '__main__':
 
     cli( obj={} )
-

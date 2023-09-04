@@ -1,5 +1,6 @@
 
 from . import librandeli
+from . import policy
 
 LOGGING = {
     "version": 1,
@@ -47,7 +48,7 @@ LOGGING = {
             'propagate': True,
         },
         "r.cli": {
-            "level": "INFO",
+            "level": "DETAIL",
             "handlers": [ "cli" ],
             'propagate': False,
         },

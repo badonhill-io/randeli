@@ -1,5 +1,9 @@
+--extra-index-url=https://pypi.apryse.com
+apryse-sdk==10.1.0
 click==8.1.7
+configobj==5.0.8
 event-notifier==1.0.13
+fonttools==4.42.1
 pip==23.2.1
-randeli==0.1.0
 setuptools==58.1.0
+six==1.16.0
