@@ -109,7 +109,7 @@ class Apryse(BaseDocument):
 
             self.processPage(reader, writer, builder)
 
-            end_page = notify.EndPage(document=self.document)
+            end_page = notify.EndPage(document=self.document, writer=writer, builder=builder)
 
             self.logger.trace("Posting EndPage notification")
             self.notificationCenter().raise_event("EndPage", end_page)
@@ -157,6 +157,12 @@ class Apryse(BaseDocument):
             writer.WriteElement(element)
 
     @FTRACE
+    def writePlacedElement(self, writer, element):
+        if writer and element:
+            writer.WritePlacedElement(element)
+            writer.Flush()
+
+    @FTRACE
     def saveDocument(self, filename="", in_dir=""):
         # standardize generation of save pathname
         super().saveDocument(filename=filename, in_dir=in_dir)
@@ -180,6 +186,7 @@ class Apryse(BaseDocument):
         return { "width" : w, "height" : h }
 
     def getTextDetails(self, ele) -> dict():
+        rect = ele.GetBBox()
         txt = ele.GetTextString()
         fnt = ele.GetGState().GetFont()
         font_family = fnt.GetFamilyName() or fnt.GetName()
@@ -205,6 +212,10 @@ class Apryse(BaseDocument):
             "font-family" : font_family,
             "italic" : italic,
             "font-size" : sz,
+            "bbox_x1" : rect.GetX1(),
+            "bbox_y1" : rect.GetY1(),
+            "bbox_x2" : rect.GetX2(),
+            "bbox_y2" : rect.GetY2(),
         }
 
     def updateTextInElement(self, writer, ele, txt, style={}) -> object:
@@ -214,8 +225,6 @@ class Apryse(BaseDocument):
         (type1 vs CID fonts?)
         """
 
-        self.devlog.info(style)
-
         gs = ele.GetGState()
 
         head_len = len(txt)
@@ -224,29 +233,48 @@ class Apryse(BaseDocument):
 
 
         if "font-path" in style and "font-size" in style:
-            self.logger.debug(f"Using {style['font-path']}")
-            fnt = APRYSE.Font.CreateTrueTypeFont(
+            if style['font-path'] and style['font-size'] > 0.0:
+                self.logger.debug(f"Using {style['font-path']}")
+                fnt = APRYSE.Font.CreateTrueTypeFont(
                     self.document.GetSDFDoc(),
                     style["font-path"] )
 
-            gs.SetFont(fnt, style['font-size'])
+                self.devlog.debug(f"Using {style['font-path']} @ {style['font-size']} as strong")
+                gs.SetFont(fnt, style['font-size'])
 
-        else:
-            self.logger.warn("No font specified in style")
+            else:
+                self.logger.detail("No font specified in style")
 
-        if "text-color" in style and len(style['text-color']) > 2:
-            r = style["text-color"][0]
-            g = style["text-color"][1]
-            b = style["text-color"][2]
-
-            # if alpha supplied as well
-            if len(style['text-color']) > 3:
-                alpha = style["text-color"][3]
+        if "text-color" in style and len(style['text-color']) > 6:
+            # text-color is #rrggbbaa string, convert to 0.0->1.0
+            rgb = self._txt_to_rgb(style['text-color'])
 
             gs.SetFillColorSpace(APRYSE.ColorSpace.CreateDeviceRGB())
-            gs.SetFillColor(APRYSE.ColorPt(r,g,b))
+            gs.SetFillColor(APRYSE.ColorPt(
+                rgb["red"],rgb["green"],rgb["blue"]))
         
         return ele
+
+    def _txt_to_rgb(self, txt):
+
+        c = txt.replace("#", "")
+
+        r = int(c[0:2], 16)
+        g = int(c[2:4], 16)
+        b = int(c[4:6], 16)
+        a = 256
+        if len(c) > 6:
+            # if alpha supplied as well
+            a = int(c[6:8], 16)
+
+        # convert to floating point 0->1.0
+        r = r / 256.0
+        g = g / 256.0
+        b = b / 256.0
+        a = a / 256.0
+
+        return { "red" : r, "green" : g, "blue" :b, "alpha" : a }
+
 
     def newTextElements(self, src, builder, txt, style={}) -> list:
 
@@ -255,11 +283,16 @@ class Apryse(BaseDocument):
         eles = []
 
         gs = src.GetGState()
+        # fallbacks in case no style supplied
+        font = gs.GetFont()
+        font_size = gs.GetFontSize()
 
         if "font" in style:
             font = style["font"]
         if "font-size" in style:
-            font_size = 12 #style["font-size"]
+            font_size = style["font-size"]
+
+        self.devlog.debug(f"Using {style['font']} @ {style['font-size']}")
 
         #eles.append( builder.CreateTextBegin(font, font_size) )
 
@@ -268,6 +301,49 @@ class Apryse(BaseDocument):
         #eles.append( builder.CreateTextEnd( ) )
 
         return eles
+
+    def drawBox(self, writer, builder, desc):
+
+        box = builder.CreateRect(
+            desc['x'], desc['y'],
+            desc['width'], desc['height'])
+
+        box.SetPathStroke(False)
+        box.SetPathFill(True)
+
+        rgb = desc['rgb']
+
+        box.GetGState().SetFillColorSpace(APRYSE.ColorSpace.CreateDeviceRGB())
+        box.GetGState().SetFillColor(APRYSE.ColorPt( rgb["red"],rgb["green"],rgb["blue"]))
+        box.GetGState().SetFillOpacity(rgb["alpha"])
+
+        self.writePlacedElement( writer, box )
+
+
+    def newBox(self, text_details, style={}) -> dict:
+
+        desc = {}
+
+        height=0
+
+        if "box-height" in style:
+            desc["height"] = style['box-height']
+
+        if height == 0:
+            desc["height"] = text_details["font-size"]
+
+        desc["width"] = 0
+
+        if "box-width" in style:
+            desc["width"] = style['box-width'] * ( text_details['bbox_x2'] - text_details['bbox_x1'] )
+
+        desc["x"] = text_details['bbox_x1']
+        desc["y"] = text_details['bbox_y1']
+
+        if "box-color" in style:
+            desc["rgb"] = self._txt_to_rgb(style['box-color'])
+
+        return desc
 
 
     @property

@@ -51,7 +51,8 @@ def write_config_value_to_file(key, value, file):
     help="Select backend PDF library")
 @click.option('--apryse-token', help="API Token for Apryse backend")
 @click.option('--font-map-file', 'font_file', type=click.Path(), help="Load font map from FILE", default="fonts.json")
-def cli(ctx, verbose, devel, cfg, backend, apryse_token, font_file):
+@click.option('--log-level', 'log_level', metavar="LOGGER:LEVEL", help="Override logging level for given logger", multiple=True)
+def cli(ctx, verbose, devel, cfg, backend, apryse_token, font_file, log_level):
 
     ctx.ensure_object(dict)
 
@@ -82,6 +83,10 @@ def cli(ctx, verbose, devel, cfg, backend, apryse_token, font_file):
         # disable d.* logging
         logging.getLogger("d.devel").setLevel("ERROR")
         logging.getLogger("d.trace").setLevel("ERROR")
+
+    for kv in log_level:
+        s = kv.split(":")
+        logging.getLogger( s[0] ).setLevel( s[1] )
         
     # overwrite with supplied configs
     if cfg:
@@ -113,8 +118,8 @@ def setup(ctx ):
         config["apryse"] = {}
         config["apryse"]["token"] = "NOTSET"
 
-        rules = randeli.policy.Rules()
-        rules.saveRulesToDict(config)
+        policy = randeli.policy.Rules()
+        policy.saveRulesToDict(config)
 
         config.filename = cfg_path
 
@@ -214,6 +219,7 @@ def map_fonts(ctx, font_file, font_dir, fallback_font, cm_alias, update_config )
         if fallback_font in fonts:
             click.echo( f"Updated fallback-font in configuration file to {write_config_value_to_file( 'policy.fallback-font', fallback_font, ctx.obj['global.cfg'])}" )
 
+
 @cli.command()
 @click.option('--read', '-i', 'read_', type=click.Path(exists=True), required=True)
 @click.option('--fonts', 'fonts', is_flag=True, help="Print document font details", default=False)
@@ -273,13 +279,13 @@ def inspect(ctx, read_, fonts, page ):
 
 @cli.command()
 @click.option('--read', '-i', 'read_', type=click.Path(exists=True), required=True)
-@click.option('--write', 'write_', type=click.Path(), required=False)
-@click.option('--write-dir', 'write_dir_', type=click.Path(), required=False, help="Save updated file into DIR")
+@click.option('--write', 'write_', metavar="PATH", type=click.Path(), required=False, help="Save augmented file to PATH")
+@click.option('--write-dir', 'write_dir_', metavar="DIR", type=click.Path(), required=False, help="Save augmented file into DIR")
 @click.option('--page', 'page', type=int, help="Only analyse page PAGE", default=0)
-@click.option('--override', 'override', metavar="KEY:VALUE", help="Override config values", multiple=True)
+@click.option('--override', 'override', metavar="KEY:VALUE", help="Override config values from CLI", multiple=True)
 @click.pass_context
-def update(ctx, read_, write_, write_dir_, page, override ):
-    """Read a PDF and update based on policies"""
+def augment(ctx, read_, write_, write_dir_, page, override ):
+    """Read a PDF and augment it based on policies"""
 
     ctx.obj['input'] = read_
     ctx.obj['page'] = page
@@ -287,90 +293,117 @@ def update(ctx, read_, write_, write_dir_, page, override ):
     ctx.obj['write_dir'] = write_dir_
 
     for kv in override:
-        s = kv.split(":")
+        s = kv.split("=")
         ctx.obj[s[0]] = s[1]
 
-    rules = randeli.policy.Rules()
-    rules.loadRulesFromDict( ctx.obj )
+    policy = randeli.policy.Rules()
+    policy.loadRulesFromDict( ctx.obj )
 
-    actions = randeli.policy.Actions()
-
-    @FTRACE
-    def beginPageCB(msg:randeli.librandeli.notify.BeginPage):
-
-        LOGGER.notice(f"Page {msg.page_number} / {msg.page_count}")
+    overlay_boxes = []
 
     @FTRACE
-    def elementCB(msg:randeli.librandeli.notify.Element):
+    def beginPageCB(msg : randeli.librandeli.notify.BeginPage):
+
+        status = ""
+
+        if ctx.obj['page'] != 0 and ctx.obj['page'] != msg.page_number:
+            status = "(not selected for updating)"
+
+        LOGGER.notice(f"Page {msg.page_number} / {msg.page_count} {status}")
+
+
+    @FTRACE
+    def endPageCB(msg : randeli.librandeli.notify.EndPage):
+
+        nonlocal overlay_boxes
+
+        for box in overlay_boxes:
+            DEVLOG.info(f"writing box {box}")
+            backend.drawBox( msg.writer, msg.builder, box)
+
+    @FTRACE
+    def elementCB(msg : randeli.librandeli.notify.Element):
 
         if ctx.obj['page'] != 0 and ctx.obj['page'] != msg.page_number:
             #just write out the unmodified object
             if msg.writer:
-                DEVLOG.info("unmodified")
+                DEVLOG.trace("Element on page not selected for modification")
                 backend.writeElement( msg.writer, msg.element )
             return
 
         # TODO OCR
-        # add policy to only ocr large images I.e. full page)
 
 
         if msg.ele_type_str == "text":
-
 
             td = backend.getTextDetails(msg.element)
 
             DEVLOG.info(f"Processing {td['text']}") 
 
-            if rules.shouldMarkup( td['text'] ):
-                LOGGER.debug(f"rules will markup {td['text']}")
+            if policy.shouldMarkup( td['text'] ):
+                LOGGER.debug(f"policy will markup {td['text']}")
 
-                splits = actions.splitWord( td['text'], rules )
+                splits = policy.splitWord( td['text'] )
 
-                DEVLOG.info( rules.getStrongFontPath(td['font-family'],
-                                                     italic=td['italic'],
-                                                     size=td['font-size']
-                                                    ) )
+                if policy.use_strong_text:
 
-                # TODO read options from configfile
-                # also support graphical (ocr), not just bolding text
-                opts={
-                    "font-path" : rules.getStrongFontPath(td['font-family'],
+                    opts={
+                        "font-path" : policy.getStrongFontPath(td['font-family'],
                                                      italic=td['italic'],
                                                      size=td['font-size']
                                                     ),
-                    "font-size": rules.getStrongFontSize(td["font-size"]),
-                    #"text-color": (0.0,0.0,1.0)
-                }
+                        "font-size": policy.getStrongFontSize(td["font-size"]),
+                        "text-color": policy.getStrongTextColor(),
+                    }
                 
-                head_ele = backend.updateTextInElement(
-                    msg.writer, msg.element, splits.head,
-                    style=opts)
+                    head_ele = backend.updateTextInElement(
+                        msg.writer, msg.element, splits.head,
+                        style=opts)
 
-                DEVLOG.info(f"head {splits.head}")
-                backend.writeElement( msg.writer, head_ele )
+                    backend.writeElement( msg.writer, head_ele )
 
-                opts={
-                    "font" : td['font'],
-                    "font-size": td["font-size"],
-                    #"text-color": (0.0,0.0,1.0)
-                }
-                tail_ele = backend.newTextElements(msg.element, msg.builder, splits.tail, style=opts)
+                    opts={
+                        "font" : td['font'],
+                        "font-size": td["font-size"],
+                    }
+                    tail_ele = backend.newTextElements(msg.element, msg.builder, splits.tail, style=opts)
 
-                for t in tail_ele:
-                    if t.GetType() == 3:
-                        DEVLOG.info(f"tail {t.GetTextString()}")
-                    else:
-                        DEVLOG.info(f"tail {t.GetType()}")
+                    for t in tail_ele:
+                        if t.GetType() == 3:
+                            DEVLOG.info(f"tail {t.GetTextString()}")
+                        else:
+                            DEVLOG.info(f"tail {t.GetType()}")
 
-                    backend.writeElement( msg.writer, t )
+                        backend.writeElement( msg.writer, t )
+                else:
+                    # write the original element, any other updates are as "overlay"
+                    backend.writeElement( msg.writer, msg.element )
+
+                if policy.use_strong_box:
+                    # to avoid co-ordinate clashses mid page, we need to
+                    # split the generation of box cordinates from
+                    # creating the box - for that we wait until
+                    # after all other elements on the page have been
+                    # written
+                    opts = {
+                        "box-color": policy.getStrongBoxColor(),
+                        "box-height" : policy.strong_box_height,
+                        "box-width" : float(len(splits.head) / len(td['text'])) ,
+                    }
+
+                    box = backend.newBox( td, style=opts )
+
+                    nonlocal overlay_boxes
+                    overlay_boxes.append(box)
+
             else:
                 # shouldMarkup == False
                 DEVLOG.info("shouldMarkup==false")
                 backend.writeElement( msg.writer, msg.element )
 
         else:
-            # on the selected page, but not an element that needs to be updated
-            DEVLOG.info("not text element")
+            # on the selected page, but not an element that needs to be augmented
+            DEVLOG.info("Not a text element")
             backend.writeElement( msg.writer, msg.element )
 
 
@@ -382,6 +415,7 @@ def update(ctx, read_, write_, write_dir_, page, override ):
         backend = randeli.librandeli.backend.Apryse(options)
 
         backend.notificationCenter().subscribe("BeginPage", beginPageCB)
+        backend.notificationCenter().subscribe("EndPage", endPageCB)
         backend.notificationCenter().subscribe("ProcessElement", elementCB)
 
         backend.loadDocument(ctx.obj['input'])

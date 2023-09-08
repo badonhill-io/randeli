@@ -17,6 +17,8 @@ class BeginPage:
 @dataclass
 class EndPage:
     document: object = None
+    writer: object = None
+    builder: object = None
 
 @dataclass
 class Element:
