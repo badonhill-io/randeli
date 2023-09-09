@@ -1,4 +1,6 @@
 
+from . import cmds
+
 from . import librandeli
 from . import policy
 
@@ -74,3 +76,4 @@ LOGGING = {
         },       
     },
 }
+
