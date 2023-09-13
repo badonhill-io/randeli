@@ -10,6 +10,7 @@ import logging.config
 import click
 
 import randeli
+from randeli.librandeli.trace import tracer as FTRACE 
 
 LOGGER = logging.getLogger("r.cli")
 DEVLOG = logging.getLogger("d.devel")
@@ -34,13 +35,18 @@ DEVLOG = logging.getLogger("d.devel")
         metavar="NUMBER",
         help="Only inspect page NUMBER",
         default=0)
+@click.option('--override', 'override', metavar="KEY:VALUE", help="Override config values from CLI", multiple=True)
 @click.pass_context
-def cli(ctx, read_, fonts, page ):
+def cli(ctx, read_, fonts, page, override ):
     """Read a PDF and report on its structure"""
 
     ctx.obj['page'] = page
     ctx.obj['fonts'] = fonts
     ctx.obj['input'] = read_
+
+    for kv in override:
+        s = kv.split("=")
+        ctx.obj[s[0]] = s[1]
 
     @FTRACE
     def beginPageCB(msg:randeli.librandeli.notify.BeginPage):

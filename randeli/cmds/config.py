@@ -11,10 +11,8 @@ import click
 
 import randeli
 from randeli.librandeli.trace import tracer as FTRACE 
-from randeli.cmds import augment
 
 configobj.DEFAULTSECT = "global"
-logging.config.dictConfig( randeli.LOGGING )
 
 LOGGER = logging.getLogger("r.cli")
 DEVLOG = logging.getLogger("d.devel")
@@ -28,6 +26,8 @@ def write_config_value_to_file(key, value, file):
     k = key.split(".")
 
     config[k[0]][k[1]] = value
+
+    LOGGER.info(f"Updating stored key {key} = {config[k[0]][k[1]]}")
 
     config.write()
 

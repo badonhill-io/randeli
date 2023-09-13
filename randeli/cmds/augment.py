@@ -3,6 +3,7 @@ import sys
 import configobj
 import pathlib
 import json
+import pprint
 
 import logging
 import logging.config
@@ -10,101 +11,87 @@ import logging.config
 import click
 
 import randeli
+from randeli.librandeli.trace import tracer as FTRACE 
 
 LOGGER = logging.getLogger("r.cli")
 DEVLOG = logging.getLogger("d.devel")
 
+class EventHandler:
 
-@click.command("augment", short_help="Write an augmented PDF")
-@click.option('--read', '-i', 'read_', type=click.Path(exists=True), required=True)
-@click.option('--write', 'write_', metavar="PATH", type=click.Path(), required=False, help="Save augmented file to PATH")
-@click.option('--write-dir', 'write_dir_', metavar="DIR", type=click.Path(), required=False, help="Save augmented file into DIR")
-@click.option('--page', 'page', type=int, help="Only analyse page PAGE", default=0)
-@click.option('--override', 'override', metavar="KEY:VALUE", help="Override config values from CLI", multiple=True)
-@click.pass_context
-def cli(ctx, read_, write_, write_dir_, page, override ):
-    """Read a PDF and augment it based on policies"""
+    def __init__(self, ctx=None, backend=None):
+        self.overlay_boxes = []
 
-    ctx.obj['input'] = read_
-    ctx.obj['page'] = page
-    ctx.obj['write'] = write_
-    ctx.obj['write_dir'] = write_dir_
+        self.ctx = ctx
+        self.backend = backend
 
-    for kv in override:
-        s = kv.split("=")
-        ctx.obj[s[0]] = s[1]
+        self.policy = randeli.policy.Rules()
+        self.policy.loadRulesFromDict( ctx )
 
-    policy = randeli.policy.Rules()
-    policy.loadRulesFromDict( ctx.obj )
 
-    overlay_boxes = []
 
     @FTRACE
-    def beginPageCB(msg : randeli.librandeli.notify.BeginPage):
+    def beginPageCB(self, msg : randeli.librandeli.notify.BeginPage):
 
         status = ""
 
-        if ctx.obj['page'] != 0 and ctx.obj['page'] != msg.page_number:
+        self.overlay_boxes = []
+
+        if self.ctx['page'] != 0 and self.ctx['page'] != msg.page_number:
             status = "(not selected for updating)"
 
         LOGGER.notice(f"Page {msg.page_number} / {msg.page_count} {status}")
 
 
     @FTRACE
-    def endPageCB(msg : randeli.librandeli.notify.EndPage):
+    def endPageCB(self, msg : randeli.librandeli.notify.EndPage):
 
-        nonlocal overlay_boxes
-
-        for box in overlay_boxes:
+        for box in self.overlay_boxes:
             DEVLOG.info(f"writing box {box}")
-            backend.drawBox( msg.writer, msg.builder, box)
+            self.backend.drawBox( msg.writer, msg.builder, box)
 
     @FTRACE
-    def elementCB(msg : randeli.librandeli.notify.Element):
+    def elementCB(self, msg : randeli.librandeli.notify.Element):
 
-        if ctx.obj['page'] != 0 and ctx.obj['page'] != msg.page_number:
+        if self.ctx['page'] != 0 and self.ctx['page'] != msg.page_number:
             #just write out the unmodified object
             if msg.writer:
                 DEVLOG.trace("Element on page not selected for modification")
-                backend.writeElement( msg.writer, msg.element )
+                self.backend.writeElement( msg.writer, msg.element )
             return
-
-        # TODO OCR
-
 
         if msg.ele_type_str == "text":
 
-            td = backend.getTextDetails(msg.element)
+            td = self.backend.getTextDetails(msg.element)
 
             DEVLOG.info(f"Processing {td['text']}") 
 
-            if policy.shouldMarkup( td['text'] ):
+            if self.policy.shouldMarkup( td['text'] ):
                 LOGGER.debug(f"policy will markup {td['text']}")
 
-                splits = policy.splitWord( td['text'] )
+                splits = self.policy.splitWord( td['text'] )
 
-                if policy.use_strong_text:
+                if self.policy.use_strong_text:
 
                     opts={
-                        "font-path" : policy.getStrongFontPath(td['font-family'],
+                        "font-path" : self.policy.getStrongFontPath(td['font-family'],
                                                      italic=td['italic'],
                                                      size=td['font-size']
                                                     ),
-                        "font-size": policy.getStrongFontSize(td["font-size"]),
-                        "text-color": policy.getStrongTextColor(),
+                        "font-size": self.policy.getStrongFontSize(td["font-size"]),
+                        "text-color": self.policy.getStrongTextColor(),
                     }
                 
-                    head_ele = backend.updateTextInElement(
+                    head_ele = self.backend.updateTextInElement(
                         msg.writer, msg.element, splits.head,
                         style=opts)
 
-                    backend.writeElement( msg.writer, head_ele )
+                    self.backend.writeElement( msg.writer, head_ele )
 
                     opts={
                         "font" : td['font'],
                         "font-size": td["font-size"],
                     }
-                    tail_ele = backend.newTextElements(msg.element, msg.builder, splits.tail, style=opts)
+                    tail_ele = self.backend.newTextElements(msg.element, msg.builder, splits.tail, style=opts)
 
                     for t in tail_ele:
                         if t.GetType() == 3:
@@ -112,49 +99,164 @@ def cli(ctx, read_, write_, write_dir_, page, override ):
                         else:
                             DEVLOG.info(f"tail {t.GetType()}")
 
-                        backend.writeElement( msg.writer, t )
+                        self.backend.writeElement( msg.writer, t )
                 else:
                     # write the original element, any other updates are as "overlay"
-                    backend.writeElement( msg.writer, msg.element )
+                    self.backend.writeElement( msg.writer, msg.element )
 
-                if policy.use_strong_box:
+                if self.policy.use_strong_box:
                     # to avoid co-ordinate clashses mid page, we need to
                     # split the generation of box cordinates from
                     # creating the box - for that we wait until
                     # after all other elements on the page have been
                     # written
                     opts = {
-                        "box-color": policy.getStrongBoxColor(),
-                        "box-height" : policy.strong_box_height,
+                        "box-color": self.policy.getStrongBoxColor(),
+                        "box-height" : self.policy.strong_box_height,
                         "box-width" : float(len(splits.head) / len(td['text'])) ,
                     }
 
-                    box = backend.newBox( td, style=opts )
+                    box = self.backend.newBox( td, style=opts )
 
-                    nonlocal overlay_boxes
-                    overlay_boxes.append(box)
+                    self.overlay_boxes.append(box)
 
             else:
                 # shouldMarkup == False
                 DEVLOG.info("shouldMarkup==false")
-                backend.writeElement( msg.writer, msg.element )
+                self.backend.writeElement( msg.writer, msg.element )
+
+        elif msg.ele_type_str == "image":
+            self.backend.writeElement( msg.writer, msg.element )
+
+            if self.ctx['ocr.enabled'] is True:
+
+                LOGGER.error("OCR Enabled")
+                imgd = self.backend.getImageDetails(msg.element)
+
+                print(imgd)
+
+                if imgd['width'] > self.policy.min_ocr_image_width and imgd['height'] > self.policy.min_ocr_image_height:
+
+                    paragraphs = self.backend.extractTextFromImage(msg.element)
+                    #pprint.pprint(paragraphs,indent=2)
+
+                    opts = {
+                        "box-x-scale": self.policy.box_x_scale,
+                        "box-x-offset": self.policy.box_x_offset,
+                        "box-y-scale": self.policy.box_y_scale,
+                        "box-y-offset": self.policy.box_y_offset,
+                        "box-color": self.policy.getStrongBoxColor(),
+                        # if 0 then look at the word's font-size`
+                        "box-height" : self.policy.strong_box_height,
+                    }
+
+                    # TODO tidy up interface,
+                    # this is exposing Apryse view into application code.
+                    for p in paragraphs:
+                        for l in p['Line']:
+                            for word_obj in l['Word']:
+            
+                                if self.policy.shouldMarkup(word_obj['text'],
+                                                            words_in_line=len(l['Word']),
+                                                            lines_in_para=len(p['Line'])):
+
+                                    splits = self.policy.splitWord( word_obj['text'] )
+
+                                    opts["box-width"] = float(len(splits.head) / len(word_obj['text'])) * word_obj['length']
+                                    LOGGER.info(f"head {splits.head} {splits.tail}")
+                                    box = self.backend.newBox( word_obj, style=opts)
+
+                                    self.overlay_boxes.append( box )
+
+                else:
+                    LOGGER.details("Image is smaller than configure minimum OCR size")
+
 
         else:
             # on the selected page, but not an element that needs to be augmented
-            DEVLOG.info("Not a text element")
-            backend.writeElement( msg.writer, msg.element )
+            DEVLOG.info(f"Not an element to be augmented ({msg.ele_type_str})")
+            self.backend.writeElement( msg.writer, msg.element )
 
+
+
+@click.command("augment", short_help="Write an augmented PDF")
+@click.option(
+    '--read',
+    '-i',
+        'read_',
+        type=click.Path(exists=True),
+        required=True)
+@click.option(
+    '--write',
+        'write_',
+        metavar="PATH",
+        type=click.Path(),
+        required=False,
+        help="Save augmented file to PATH")
+@click.option(
+    '--write-dir',
+        'write_dir_',
+        metavar="DIR",
+        type=click.Path(),
+        required=False,
+        help="Save augmented file into DIR")
+@click.option(
+    '--page',
+        'page',
+        type=int,
+        help="Only analyse page PAGE",
+        default=0)
+@click.option(
+    '--ocr',
+        'enable_ocr',
+        is_flag=True,
+        metavar="KEY:VALUE",
+        help="Enable OCR")
+@click.option(
+    '--ocr-engine',
+        'ocr_engine',
+        type=click.Choice(["apryse"]),
+        default="apryse",
+        help="Select OCR Engine")
+@click.option(
+    '--override',
+        'override',
+        metavar="KEY:VALUE",
+        help="Override config values from CLI",
+        multiple=True)
+@click.pass_context
+def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, override ):
+    """Read a PDF and augment it based on policies"""
+
+    ctx.obj['input'] = read_
+    ctx.obj['page'] = page
+    ctx.obj['write'] = write_
+    ctx.obj['write_dir'] = write_dir_
+
+    ctx.obj['ocr.enabled'] = enable_ocr
+    ctx.obj['ocr.engine'] = ocr_engine
+
+    for kv in override:
+        s = kv.split("=")
+        ctx.obj[s[0]] = s[1]
 
     options = {
         "apryse-token" : ctx.obj['apryse.token'],
+        "apryse-ocr" :  False,
+        "apryse-libdir" : ctx.obj['ocr.libdir'],
     }
+
+    if ctx.obj['ocr.enabled'] is True and ctx.obj['ocr.engine'] == "apryse":
+        options["apryse-ocr"] = True
 
     try:
         backend = randeli.librandeli.backend.Apryse(options)
 
-        backend.notificationCenter().subscribe("BeginPage", beginPageCB)
-        backend.notificationCenter().subscribe("EndPage", endPageCB)
-        backend.notificationCenter().subscribe("ProcessElement", elementCB)
+        eventH = EventHandler(ctx=ctx.obj, backend=backend)
+
+        backend.notificationCenter().subscribe("BeginPage", eventH.beginPageCB)
+        backend.notificationCenter().subscribe("EndPage", eventH.endPageCB)
+        backend.notificationCenter().subscribe("ProcessElement", eventH.elementCB)
 
         backend.loadDocument(ctx.obj['input'])
 

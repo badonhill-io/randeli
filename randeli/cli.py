@@ -5,6 +5,7 @@ import sys
 import configobj
 import pathlib
 import json
+import pydantic
 
 import logging
 import logging.config
@@ -91,10 +92,13 @@ def cli(ctx, verbose, devel, cfg, backend, apryse_token, font_file, log_level):
         print("COMMANDS: ")
         cmds = r.list_commands( ctx = ctx) 
         for c in cmds:
-            c = c.replace('.py','')
-            print( f"  {c}" )
+            name = c.replace('.py','')
+            mod = __import__(f"randeli.cmds.{name}", None, None, ["cli"])
+            print( f"  {name:>10} - {mod.cli.__doc__}" )
 
     ctx.ensure_object(dict)
+
+    ctx.obj['top_dir'] = pathlib.PosixPath(randeli.__file__).parent
 
     cfg_path = pathlib.Path(cfg)
 
@@ -104,12 +108,18 @@ def cli(ctx, verbose, devel, cfg, backend, apryse_token, font_file, log_level):
 
         for k,v in config.dict().items():
             for vv in v:
-                ctx.obj[f"{k}.{vv}"] = v[vv]
+                # parse booleans
+                if f"{k}.{vv}" in [ "global.devel", "ocr.enabled" ]:
+                    ctx.obj[f"{k}.{vv}"] = pydantic.parse_obj_as(bool,v[vv])
+                else:
+                    ctx.obj[f"{k}.{vv}"] = v[vv]
 
         if config["apryse"].get("token", "") == "NOTSET":
             ctx.obj['apryse.token'] = ""
         else:
             ctx.obj['apryse.token'] = config["apryse"].get("token","")
+
+    ctx.obj['global.devel'] = devel
 
     if font_file:
         ctx.obj['policy.font-map-file'] = font_file
@@ -119,7 +129,7 @@ def cli(ctx, verbose, devel, cfg, backend, apryse_token, font_file, log_level):
     if not font_path.exists():
         ctx.obj['policy.font-map-file'] = ""
 
-    if devel is False:
+    if ctx.obj['global.devel'] is False:
         # disable d.* logging
         logging.getLogger("d.devel").setLevel("ERROR")
         logging.getLogger("d.trace").setLevel("ERROR")

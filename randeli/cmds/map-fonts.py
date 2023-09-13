@@ -11,9 +11,7 @@ import click
 
 import randeli
 from randeli.librandeli.trace import tracer as FTRACE 
-from randeli.cmds import augment
 
-configobj.DEFAULTSECT = "global"
 logging.config.dictConfig( randeli.LOGGING )
 
 LOGGER = logging.getLogger("r.cli")

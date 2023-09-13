@@ -46,6 +46,9 @@ class BaseDocument:
         if filename:
             self.save_file = PosixPath(filename)
 
+        if self.save_file == self.read_file:
+            raise Exception("Output file cannot be the same as the input filename")
+
     def getImageDetails(self, ele = None) -> dict():
         return {}
 

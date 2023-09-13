@@ -1,6 +1,9 @@
 
 import logging
+import logging.config
 import math
+import tempfile
+import json
 
 import apryse_sdk as APRYSE
 
@@ -28,6 +31,9 @@ ELEMENTTYPES = {
         14 : "marked-content-point",
 }
 
+LOGGER = logging.getLogger(log_name)
+DEVLOG = logging.getLogger("d.devel")
+
 class Apryse(BaseDocument):
 
     def __init__(self, options={}, log=log_name):
@@ -35,14 +41,37 @@ class Apryse(BaseDocument):
 
         self._document = None
 
-        self._logger = logging.getLogger(log)
-        self._devlog = logging.getLogger("d.devel")
+        self.logger = logging.getLogger(log)
+        self.devlog = logging.getLogger("d.devel")
+
+        self._ocr_options = None
 
         if "apryse-token" not in self.options or self.options["apryse-token"] == "":
             self.logger.fatal("Missing Apryse API key")
             raise Exception("Missing Apryse API key")
 
         APRYSE.PDFNet.Initialize( self.options["apryse-token"] )
+
+        try:
+            if self.options.get("apryse-ocr", False) is True:
+
+                self._ocr_options = APRYSE.OCROptions()
+                self._ocr_options.SetUsePDFPageCoords(True);
+                #self._ocr_options.AddDPI(96);
+
+                if self.options.get("apryse-libdir", ""):
+
+                    self._ocrdir = self.options["apryse-libdir"]
+                    
+                    APRYSE.PDFNet.AddResourceSearchPath(self._ocrdir)
+                    self.logger.info(f"OCR has been enabled")
+                    self.logger.error(f" libdir = {self._ocrdir}")
+
+                else:
+                    self.logger.error("OCR has been requested, but no ocr.libdir is set")
+
+        except Exception as e:
+            self.logger.error(str(e))
 
 
     def finalise(self):
@@ -171,7 +200,7 @@ class Apryse(BaseDocument):
 
         info = self.document.GetDocInfo()
         producer = info.GetProducer()
-        info.SetProducer(f"{producer} - Updated by 'randeli' from Badon Hill Technologies Ltd.")
+        info.SetProducer(f"{producer} - Augmented using 'randeli' by Badon Hill Technologies Ltd.")
         d = APRYSE.Date()
         d.SetCurrentTime()
         info.SetModDate( d )
@@ -180,11 +209,19 @@ class Apryse(BaseDocument):
 
 
 
+    @FTRACE
     def getImageDetails(self, ele) -> dict():
+        rect = ele.GetBBox()
         h = ele.GetImageHeight()
         w = ele.GetImageWidth()
-        return { "width" : w, "height" : h }
+        return {
+            "x" : int(rect.GetX1()),
+            "y" : int(rect.GetY1()),
+            "width" : int(rect.GetX2() - rect.GetX1()) ,
+            "height" : int(rect.GetY2() - rect.GetY1())
+        }
 
+    @FTRACE
     def getTextDetails(self, ele) -> dict():
         rect = ele.GetBBox()
         txt = ele.GetTextString()
@@ -212,12 +249,13 @@ class Apryse(BaseDocument):
             "font-family" : font_family,
             "italic" : italic,
             "font-size" : sz,
-            "bbox_x1" : rect.GetX1(),
-            "bbox_y1" : rect.GetY1(),
-            "bbox_x2" : rect.GetX2(),
-            "bbox_y2" : rect.GetY2(),
+            "x" : rect.GetX1(),
+            "y" : rect.GetY1(),
+            "length" : rect.GetX2() - rect.GetX1() ,
+            "height" : rect.GetY2() - rect.GetY1(),
         }
 
+    @FTRACE
     def updateTextInElement(self, writer, ele, txt, style={}) -> object:
         """TODO
         this currently only handles UTF-8 (i.e. pdflatex), it does not
@@ -262,20 +300,21 @@ class Apryse(BaseDocument):
         r = int(c[0:2], 16)
         g = int(c[2:4], 16)
         b = int(c[4:6], 16)
-        a = 256
+        a = 255
         if len(c) > 6:
             # if alpha supplied as well
             a = int(c[6:8], 16)
 
         # convert to floating point 0->1.0
-        r = r / 256.0
-        g = g / 256.0
-        b = b / 256.0
-        a = a / 256.0
+        r = r / 255.0
+        g = g / 255.0
+        b = b / 255.0
+        a = a / 255.0
 
         return { "red" : r, "green" : g, "blue" :b, "alpha" : a }
 
 
+    @FTRACE
     def newTextElements(self, src, builder, txt, style={}) -> list:
 
         self.devlog.info(style)
@@ -302,11 +341,13 @@ class Apryse(BaseDocument):
 
         return eles
 
+    @FTRACE
     def drawBox(self, writer, builder, desc):
 
         box = builder.CreateRect(
             desc['x'], desc['y'],
-            desc['width'], desc['height'])
+            desc['width'],
+            desc['height'])
 
         box.SetPathStroke(False)
         box.SetPathFill(True)
@@ -320,31 +361,90 @@ class Apryse(BaseDocument):
         self.writePlacedElement( writer, box )
 
 
-    def newBox(self, text_details, style={}) -> dict:
+    @FTRACE
+    def newBox(self, obj, style={}) -> dict:
 
         desc = {}
 
-        height=0
+        desc["height"] = 0
 
         if "box-height" in style:
             desc["height"] = style['box-height']
 
-        if height == 0:
-            desc["height"] = text_details["font-size"]
+        if desc["height"] == 0:
+            desc["height"] = obj["font-size"]
 
         desc["width"] = 0
 
         if "box-width" in style:
-            desc["width"] = style['box-width'] * ( text_details['bbox_x2'] - text_details['bbox_x1'] )
+            desc["width"] = style['box-width']
 
-        desc["x"] = text_details['bbox_x1']
-        desc["y"] = text_details['bbox_y1']
+        if desc["width"] < 1.0 and 'length' in obj:
+            # width is a fraction, so multiply if by overall word length
+            desc["width"] = style['box-width'] * ( obj['length'] )
+
+        desc["x"] = ( style['box-x-scale'] * obj['x'] ) + style['box-x-offset'] 
+        desc["y"] = ( style['box-y-scale'] * obj['y'] ) + style['box-y-offset'] 
 
         if "box-color" in style:
             desc["rgb"] = self._txt_to_rgb(style['box-color'])
 
         return desc
 
+    @FTRACE
+    def extractTextFromImage(self, el) -> dict():
+        """Returns nested dictionary
+        {
+            "Page": [
+                {
+                    "Para": [
+                        {
+                            "Line": [
+                                {
+                                    "Word": [
+                                        {
+                                            "font-size": 43,
+                                            "length": 44,
+                                            "orientation": "U",
+                                            "text": "a2)",
+                                            "x": 247,
+                                            "y": 2217
+                                        },
+                                        ...
+                                    ],
+                                    "box" : [
+                                    ]
+                                },
+                                ...
+                            ],
+                        }
+                    ],
+                    "dpi" : 96,
+                    "num" : 1,
+                    "origin": "BottomLeft"
+                }
+            ]
+        }
+            
+        """
+
+        image = APRYSE.Image(el.GetXObject())
+
+        doc = APRYSE.PDFDoc()
+
+        ocr = {}
+
+        #with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+        with open("fred.png","w") as tmp:
+
+            image.ExportAsPng(tmp.name)
+
+            txt = APRYSE.OCRModule.GetOCRJsonFromImage(
+                doc, tmp.name, self._ocr_options)
+
+            ocr = json.loads(txt)
+
+        return ocr['Page'][0]['Para']
 
     @property
     def devlog(self):

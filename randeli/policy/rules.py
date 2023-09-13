@@ -85,8 +85,12 @@ class Rules:
         self.font_map = {}
 
         self.use_strong_box = True
-        self.strong_box_y_offset = 0
+        self.box_x_scale = 1.0
+        self.box_y_scale = 1.0
+        self.box_x_offset = 0
+        self.box_y_offset = 0
         self.strong_box_height = 0
+        self.strong_box_width = 0
 
         self.use_strong_text_color = True
         self.strong_text_color = "#011993"
@@ -96,6 +100,10 @@ class Rules:
 
         self.min_ocr_image_width = 640
         self.min_ocr_image_height = 480
+
+        # these apply when we have additional context, i.e. full page OCR
+        self.min_words_in_line = 5
+        self.min_lines_in_para = 3
 
     def loadRulesFromDict(self, cfg):
         """Reading th dict from external file is done by caller"""
@@ -112,6 +120,9 @@ class Rules:
 
             if 'policy.strong_text_color' in cfg:
                 self.strong_text_color = cfg['policy.strong_text_color']
+
+            if 'policy.strong_box_color' in cfg:
+                self.strong_box_color = cfg['policy.strong_box_color']
 
             if 'policy.seed' in cfg:
                 self.seed = cfg['policy.seed']
@@ -136,6 +147,25 @@ class Rules:
 
             if 'policy.modify_strong_font_size' in cfg:
                 self.modify_strong_font_size = float(cfg["policy.modify_strong_font_size"])
+
+            if 'policy.min_words_in_line' in cfg:
+                self.min_words_in_line = int(cfg["policy.min_words_in_line"])
+
+            if 'policy.min_lines_in_para' in cfg:
+                self.min_lines_in_para = int(cfg["policy.min_lines_in_para"])
+
+            if 'policy.box_x_scale' in cfg:
+                self.box_x_scale = float(cfg["policy.box_x_scale"])
+
+            if 'policy.box_y_scale' in cfg:
+                self.box_y_scale = float(cfg["policy.box_y_scale"])
+
+            if 'policy.box_x_offset' in cfg:
+                self.box_x_offset = float(cfg["policy.box_x_offset"])
+
+            if 'policy.box_y_offset' in cfg:
+                self.box_y_offset = float(cfg["policy.box_y_offset"])
+
         except:
             pass
 
@@ -155,15 +185,27 @@ class Rules:
             cfg["policy"]["max_head_len"] = self.max_head_len
             cfg["policy"]["min_ocr_image_width"] = self.min_ocr_image_width
             cfg["policy"]["min_ocr_image_height"] = self.min_ocr_image_height
+            cfg["policy"]["min_words_in_line"] = self.min_words_in_line
+            cfg["policy"]["min_lines_in_para"] = self.min_lines_in_para
             cfg["policy"]["modify_strong_font_size"] = self.modify_strong_font_size
             cfg["policy"]["fallback-font"] = self.fallback_font
             cfg["policy"]["font-map-file"] = self.font_map_file
+
+            cfg["policy"]["box_x_scale"] = self.box_x_scale
+            cfg["policy"]["box_y_scale"] = self.box_y_scale
+            cfg["policy"]["box_x_offset"] = self.box_x_offset
+            cfg["policy"]["box_y_offset"] = self.box_y_offset
+
         except:
             pass
 
-    def shouldMarkup(self, word) -> bool :
+
+    def shouldMarkup(self, word, words_in_line=0, lines_in_para=0 ) -> bool :
         """Returns if 'word' should be marked up
-        (taking into account letters, numbers, etc)"""
+        (taking into account letters, numbers, etc)
+
+        Advanced context (words_in_line/lines_in_para) improve model
+        """
         ret = False
 
         cls = word_classes(word)
@@ -188,6 +230,14 @@ class Rules:
         if ( cls.upper_case + cls.lower_case ) > cls.punctuation:
             """More letters than punctuation -> True"""
             ret = True
+
+        # the above only look at the characters in a word, now look at context (overriding any Trues above)
+
+        if words_in_line > 0 and words_in_line < self.min_words_in_line:
+            ret = False
+
+        if lines_in_para > 0 and lines_in_para < self.min_lines_in_para:
+            ret = False
 
         """All other combinations not marked up"""
         return ret
@@ -367,5 +417,24 @@ class Rules:
     @use_strong_text_color.setter
     def use_strong_text_color(self, value):
         self._use_strong_color = pydantic.parse_obj_as(bool,value)
+
+    @property
+    def min_words_in_line(self):
+        return self._min_words_in_line
+
+    @min_words_in_line.setter
+    def min_words_in_line(self, value):
+        self._min_words_in_line = value
+
+    @property
+    def min_lines_in_para(self):
+        return self._min_lines_in_para
+
+    @min_lines_in_para.setter
+    def min_lines_in_para(self, value):
+        self._min_lines_in_para = value
+
+
+
 
 

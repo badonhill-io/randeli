@@ -45,7 +45,7 @@ LOGGING = {
             "handlers": [ "cli" ]
         },
         "r": {
-            "level": "INFO",
+            "level": "DEBUG",
             "handlers": [ "cli" ],
             'propagate': True,
         },
@@ -60,7 +60,7 @@ LOGGING = {
             'propagate': False,
         },
         "r.l": {
-            "level": "INFO",
+            "level": "DEBUG",
             "handlers": [ "cli" ],
             'propagate': False,
         },
