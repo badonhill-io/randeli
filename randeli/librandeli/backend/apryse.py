@@ -8,8 +8,8 @@ import json
 import apryse_sdk as APRYSE
 
 from . import BaseDocument
-from .. import notify 
-from .. trace import tracer as FTRACE 
+from .. import notify
+from .. trace import tracer as FTRACE
 
 log_name = "r.l.b.apryse"
 
@@ -44,6 +44,8 @@ class Apryse(BaseDocument):
         self.logger = logging.getLogger(log)
         self.devlog = logging.getLogger("d.devel")
 
+        # Use whole page for OCR, or each image element?
+
         self._ocr_options = None
 
         if "apryse-token" not in self.options or self.options["apryse-token"] == "":
@@ -57,12 +59,12 @@ class Apryse(BaseDocument):
 
                 self._ocr_options = APRYSE.OCROptions()
                 self._ocr_options.SetUsePDFPageCoords(True);
-                #self._ocr_options.AddDPI(96);
+                self._ocr_options.AddDPI(72);
 
                 if self.options.get("apryse-libdir", ""):
 
                     self._ocrdir = self.options["apryse-libdir"]
-                    
+
                     APRYSE.PDFNet.AddResourceSearchPath(self._ocrdir)
                     self.logger.info(f"OCR has been enabled")
                     self.logger.error(f" libdir = {self._ocrdir}")
@@ -126,9 +128,19 @@ class Apryse(BaseDocument):
             if writer:
                 writer.Begin(page, APRYSE.ElementWriter.e_replacement, False)
 
+            rect = page.GetBox( APRYSE.Page.e_media )
+
+            bounding  = {
+                "x1" : int(rect.GetX1()),
+                "y1" : int(rect.GetY1()),
+                "x2" : int(rect.GetX2()),
+                "y2" : int(rect.GetY2()),
+            }
+
             begin_page = notify.BeginPage(document=self.document,
                                          page_count=self.page_count,
-                                         page_number=self.page_number)
+                                         page_number=self.page_number,
+                                         bbox=bounding)
 
             self.logger.trace("Posting BeginPage notification")
             self.notificationCenter().raise_event("BeginPage", begin_page)
@@ -136,7 +148,7 @@ class Apryse(BaseDocument):
             # reset to zero on each page
             self.ele_index = 0
 
-            self.processPage(reader, writer, builder)
+            self.processPage(reader, writer, builder, page)
 
             end_page = notify.EndPage(document=self.document, writer=writer, builder=builder)
 
@@ -150,7 +162,7 @@ class Apryse(BaseDocument):
             itr.Next()
 
     @FTRACE
-    def processPage(self, reader, writer, builder):
+    def processPage(self, reader, writer, builder, current_page):
         super().processPage()
 
         page_elements = []
@@ -163,12 +175,22 @@ class Apryse(BaseDocument):
 
             page_elements.append( ele.GetType() )
 
+            rect = ele.GetBBox()
+            bounding  = {
+                "x1" : int(rect.GetX1()),
+                "y1" : int(rect.GetY1()),
+                "x2" : int(rect.GetX2()),
+                "y2" : int(rect.GetY2()),
+            }
+
             element = notify.Element(document=self.document,
                                      reader=reader,
                                      writer=writer,
                                      builder=builder,
+                                     page=current_page,
                                      page_number=self.page_number,
                                      page_elements=page_elements,
+                                     bbox=bounding,
                                      ele_idx=self.ele_index,
                                      ele_type=ele.GetType(),
                                      ele_type_str=ELEMENTTYPES[ele.GetType()],
@@ -192,7 +214,7 @@ class Apryse(BaseDocument):
             writer.Flush()
 
     @FTRACE
-    def saveDocument(self, filename="", in_dir=""):
+    def saveDocument(self, filename="", in_dir="", pdfa=False):
         # standardize generation of save pathname
         super().saveDocument(filename=filename, in_dir=in_dir)
 
@@ -206,6 +228,16 @@ class Apryse(BaseDocument):
         info.SetModDate( d )
 
         self.document.Save(self.save_file, APRYSE.SDFDoc.e_remove_unused )
+
+        if pdfa:
+            pdfa_file = self.save_file.replace(".pdf", "_PDFA.pdf")
+
+
+            pdf_a = APRYSE.PDFACompliance(True, self.save_file, None, APRYSE.PDFACompliance.e_Level2B, 0, 10)
+
+            pdf_a.SaveAs(pdfa_file , False)
+
+            self.logger.info(f"Saved PDF/A to {pdfa_file}")
 
 
 
@@ -241,7 +273,7 @@ class Apryse(BaseDocument):
                 if key.GetName() == "ItalicAngle" and not math.isclose( value.GetNumber(), 0.0 ) :
                     italic = True
                 itr.Next()
-        
+
         return {
             "text" : txt,
             "font" : fnt,
@@ -249,6 +281,7 @@ class Apryse(BaseDocument):
             "font-family" : font_family,
             "italic" : italic,
             "font-size" : sz,
+            "font-type" : fnt.GetType(),
             "x" : rect.GetX1(),
             "y" : rect.GetY1(),
             "length" : rect.GetX2() - rect.GetX1() ,
@@ -260,7 +293,7 @@ class Apryse(BaseDocument):
         """TODO
         this currently only handles UTF-8 (i.e. pdflatex), it does not
         handle xelatex generated PDFs - the font mapping is different
-        (type1 vs CID fonts?)
+        (simple vs complex fonts?)
         """
 
         gs = ele.GetGState()
@@ -271,11 +304,15 @@ class Apryse(BaseDocument):
 
 
         if "font-path" in style and "font-size" in style:
+
             if style['font-path'] and style['font-size'] > 0.0:
+
                 self.logger.debug(f"Using {style['font-path']}")
+
                 fnt = APRYSE.Font.CreateTrueTypeFont(
-                    self.document.GetSDFDoc(),
-                    style["font-path"] )
+                        self.document.GetSDFDoc(),
+                        style["font-path"] )
+
 
                 self.devlog.debug(f"Using {style['font-path']} @ {style['font-size']} as strong")
                 gs.SetFont(fnt, style['font-size'])
@@ -290,7 +327,7 @@ class Apryse(BaseDocument):
             gs.SetFillColorSpace(APRYSE.ColorSpace.CreateDeviceRGB())
             gs.SetFillColor(APRYSE.ColorPt(
                 rgb["red"],rgb["green"],rgb["blue"]))
-        
+
         return ele
 
     def _txt_to_rgb(self, txt):
@@ -317,7 +354,7 @@ class Apryse(BaseDocument):
     @FTRACE
     def newTextElements(self, src, builder, txt, style={}) -> list:
 
-        self.devlog.info(style)
+        self.devlog.detail(style)
 
         eles = []
 
@@ -333,11 +370,7 @@ class Apryse(BaseDocument):
 
         self.devlog.debug(f"Using {style['font']} @ {style['font-size']}")
 
-        #eles.append( builder.CreateTextBegin(font, font_size) )
-
         eles.append( builder.CreateTextRun(txt, font, font_size ) )
-
-        #eles.append( builder.CreateTextEnd( ) )
 
         return eles
 
@@ -383,8 +416,22 @@ class Apryse(BaseDocument):
             # width is a fraction, so multiply if by overall word length
             desc["width"] = style['box-width'] * ( obj['length'] )
 
-        desc["x"] = ( style['box-x-scale'] * obj['x'] ) + style['box-x-offset'] 
-        desc["y"] = ( style['box-y-scale'] * obj['y'] ) + style['box-y-offset'] 
+
+        box_x_scale = 1.0
+        box_y_scale = 1.0
+        box_x_offset = 0.0
+        box_y_offset = 0.0
+        if "box-x-scale" in style:
+            box_x_style = style['box-x-scale']
+        if "box-y-scale" in style:
+            box_y_style = style['box-y-scale']
+        if "box-x-offset" in style:
+            box_x_offset = style['box-x-offset']
+        if "box-y-offset" in style:
+            box_y_offset = style['box-y-offset']
+
+        desc["x"] = ( box_x_scale * obj['x'] ) + box_x_offset
+        desc["y"] = ( box_y_scale * obj['y'] ) + box_y_offset
 
         if "box-color" in style:
             desc["rgb"] = self._txt_to_rgb(style['box-color'])
@@ -392,8 +439,8 @@ class Apryse(BaseDocument):
         return desc
 
     @FTRACE
-    def extractTextFromImage(self, el) -> dict():
-        """Returns nested dictionary
+    def extractTextFromImage(self, msg) -> str:
+        """Returns JSON string containing nested objects
         {
             "Page": [
                 {
@@ -425,26 +472,78 @@ class Apryse(BaseDocument):
                 }
             ]
         }
-            
+
         """
 
-        image = APRYSE.Image(el.GetXObject())
 
-        doc = APRYSE.PDFDoc()
+        ocr = ""
 
-        ocr = {}
+        def _process_page_as_ocr(page, file) -> str:
+            """Using draw.Export() gives better word boundaries than
+            Image(el.GetXObject())->ExportAsPng() but at the cost
+            of a watermark in the intermediate image
+            Since we only want the image to get word locations this is okay.
 
-        #with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
-        with open("fred.png","w") as tmp:
+            However PDFDraw() takes the whole page. not just the
+            image in the element.
+            """
 
-            image.ExportAsPng(tmp.name)
+            drw = APRYSE.PDFDraw()
+            drw.SetDPI(72)
 
-            txt = APRYSE.OCRModule.GetOCRJsonFromImage(
-                doc, tmp.name, self._ocr_options)
+            doc = APRYSE.PDFDoc()
 
-            ocr = json.loads(txt)
+            drw.Export(page, file.name)
 
-        return ocr['Page'][0]['Para']
+            json = APRYSE.OCRModule.GetOCRJsonFromImage(
+                doc, file.name, self._ocr_options)
+
+            return json
+
+
+        def _process_element_as_ocr(el, file) -> str:
+            """Using draw.Export() gives better word boundaries than
+            Image(el.GetXObject())->ExportAsPng() but at the cost
+            of a watermark in the intermediate image
+            Since we only want the image to get word locations this is okay.
+
+            However PDFDraw() takes the whole page. not just the
+            image in the element.
+            """
+
+            image = APRYSE.Image(el.GetXObject())
+
+            image.ExportAsPng(file.name)
+
+            doc = APRYSE.PDFDoc()
+
+            json = APRYSE.OCRModule.GetOCRJsonFromImage(
+                doc, file.name, self._ocr_options)
+
+            return json
+
+
+        if self.options.get("keep-files", False) is False:
+
+            with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+
+                if self.options.get("ocr-whole-page", True) is True:
+                    ocr = _process_page_as_ocr(msg.page, tmp)
+                else:
+                    ocr = _process_element_as_ocr(msg.element, tmp)
+
+        else:
+            png = f"{self.read_file}.{msg.page_number}-{msg.ele_idx}.png"
+            with open(png,"w") as tmp:
+
+                LOGGER.debug(f"Extracting intermediate image to {png}")
+
+                if self.options.get("ocr-whole-page", True) is True:
+                    ocr = _process_page_as_ocr(msg.page, tmp)
+                else:
+                    ocr = _process_element_as_ocr(msg.element, tmp)
+
+        return ocr
 
     @property
     def devlog(self):
@@ -452,4 +551,4 @@ class Apryse(BaseDocument):
 
     @devlog.setter
     def devlog(self, value):
-        self._devlog = value 
+        self._devlog = value

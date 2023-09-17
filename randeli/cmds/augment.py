@@ -11,7 +11,7 @@ import logging.config
 import click
 
 import randeli
-from randeli.librandeli.trace import tracer as FTRACE 
+from randeli.librandeli.trace import tracer as FTRACE
 
 LOGGER = logging.getLogger("r.cli")
 DEVLOG = logging.getLogger("d.devel")
@@ -20,14 +20,13 @@ class EventHandler:
 
     def __init__(self, ctx=None, backend=None):
         self.overlay_boxes = []
+        self.overlay_boxes = []
 
         self.ctx = ctx
         self.backend = backend
 
         self.policy = randeli.policy.Rules()
         self.policy.loadRulesFromDict( ctx )
-
-
 
     @FTRACE
     def beginPageCB(self, msg : randeli.librandeli.notify.BeginPage):
@@ -63,24 +62,25 @@ class EventHandler:
 
             td = self.backend.getTextDetails(msg.element)
 
-            DEVLOG.info(f"Processing {td['text']}") 
+            DEVLOG.info(f"Processing '{td['text']}'")
 
-            if self.policy.shouldMarkup( td['text'] ):
+            if self.policy.shouldAugment( td['text'] ):
                 LOGGER.debug(f"policy will markup {td['text']}")
 
                 splits = self.policy.splitWord( td['text'] )
 
-                if self.policy.use_strong_text:
+                if self.policy.use_strong_text or self.policy.use_colored_text :
 
                     opts={
-                        "font-path" : self.policy.getStrongFontPath(td['font-family'],
-                                                     italic=td['italic'],
-                                                     size=td['font-size']
-                                                    ),
+                        "font-path" : self.policy.getStrongFontPath(
+                            td['font-family'],
+                            italic=td['italic'],
+                            size=td['font-size']
+                        ),
                         "font-size": self.policy.getStrongFontSize(td["font-size"]),
-                        "text-color": self.policy.getStrongTextColor(),
+                        "text-color": self.policy.getColoredTextColor(),
                     }
-                
+
                     head_ele = self.backend.updateTextInElement(
                         msg.writer, msg.element, splits.head,
                         style=opts)
@@ -111,6 +111,10 @@ class EventHandler:
                     # after all other elements on the page have been
                     # written
                     opts = {
+                        "box-x-scale": self.policy.box_x_scale,
+                        "box-x-offset": self.policy.box_x_offset,
+                        "box-y-scale": self.policy.box_y_scale,
+                        "box-y-offset": self.policy.box_y_offset,
                         "box-color": self.policy.getStrongBoxColor(),
                         "box-height" : self.policy.strong_box_height,
                         "box-width" : float(len(splits.head) / len(td['text'])) ,
@@ -121,8 +125,7 @@ class EventHandler:
                     self.overlay_boxes.append(box)
 
             else:
-                # shouldMarkup == False
-                DEVLOG.info("shouldMarkup==false")
+                # shouldAugment == False
                 self.backend.writeElement( msg.writer, msg.element )
 
         elif msg.ele_type_str == "image":
@@ -133,12 +136,10 @@ class EventHandler:
                 LOGGER.error("OCR Enabled")
                 imgd = self.backend.getImageDetails(msg.element)
 
-                print(imgd)
-
                 if imgd['width'] > self.policy.min_ocr_image_width and imgd['height'] > self.policy.min_ocr_image_height:
 
-                    paragraphs = self.backend.extractTextFromImage(msg.element)
-                    #pprint.pprint(paragraphs,indent=2)
+                    jsn = self.backend.extractTextFromImage(msg)
+                    paragraphs = json.loads(jsn)
 
                     opts = {
                         "box-x-scale": self.policy.box_x_scale,
@@ -152,24 +153,24 @@ class EventHandler:
 
                     # TODO tidy up interface,
                     # this is exposing Apryse view into application code.
-                    for p in paragraphs:
+                    for p in paragraphs['Page'][0]['Para']:
                         for l in p['Line']:
                             for word_obj in l['Word']:
-            
-                                if self.policy.shouldMarkup(word_obj['text'],
+
+                                if self.policy.shouldAugment(word_obj['text'],
                                                             words_in_line=len(l['Word']),
                                                             lines_in_para=len(p['Line'])):
 
                                     splits = self.policy.splitWord( word_obj['text'] )
 
                                     opts["box-width"] = float(len(splits.head) / len(word_obj['text'])) * word_obj['length']
-                                    LOGGER.info(f"head {splits.head} {splits.tail}")
+
                                     box = self.backend.newBox( word_obj, style=opts)
 
                                     self.overlay_boxes.append( box )
 
                 else:
-                    LOGGER.details("Image is smaller than configure minimum OCR size")
+                    LOGGER.detail("Image is smaller than configure minimum OCR size")
 
 
         else:
@@ -219,22 +220,42 @@ class EventHandler:
         default="apryse",
         help="Select OCR Engine")
 @click.option(
+    '--ocr-mode',
+        'ocr_mode',
+        type=click.Choice(["page", "element"]),
+        default="page",
+        help="Select OCR Mode")
+@click.option(
     '--override',
         'override',
         metavar="KEY:VALUE",
         help="Override config values from CLI",
         multiple=True)
+@click.option(
+    '--keep',
+        'keep_files',
+        is_flag=True,
+        help="Keep intermediate OCR files")
+@click.option(
+    '--pdfa',
+        'pdfa',
+        is_flag=True,
+        help="Also write a PDF/A file")
 @click.pass_context
-def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, override ):
+def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, override, keep_files, pdfa ):
     """Read a PDF and augment it based on policies"""
 
     ctx.obj['input'] = read_
     ctx.obj['page'] = page
     ctx.obj['write'] = write_
     ctx.obj['write_dir'] = write_dir_
+    ctx.obj['keep-files'] = keep_files
 
     ctx.obj['ocr.enabled'] = enable_ocr
     ctx.obj['ocr.engine'] = ocr_engine
+    ctx.obj['ocr.mode'] = ocr_mode
+
+    ctx.obj['pdfa'] = pdfa
 
     for kv in override:
         s = kv.split("=")
@@ -244,10 +265,17 @@ def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, override )
         "apryse-token" : ctx.obj['apryse.token'],
         "apryse-ocr" :  False,
         "apryse-libdir" : ctx.obj['ocr.libdir'],
+        "keep-files" : ctx.obj['keep-files'],
     }
 
     if ctx.obj['ocr.enabled'] is True and ctx.obj['ocr.engine'] == "apryse":
         options["apryse-ocr"] = True
+
+    if ctx.obj['ocr.mode'] == "page" :
+
+        options["ocr-whole-page"] = True
+    else:
+        options["ocr-whole-page"] = False
 
     try:
         backend = randeli.librandeli.backend.Apryse(options)
@@ -267,6 +295,8 @@ def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, override )
             args["filename" ] = ctx.obj['write']
         if write_dir_:
             args["in_dir" ] = ctx.obj['write_dir']
+        if pdfa:
+            args["pdfa" ] = ctx.obj['pdfa']
 
         backend.saveDocument( **args )
         backend.finalise()

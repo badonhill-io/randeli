@@ -78,7 +78,7 @@ class RandeliCLI(click.Group):
 @click.option(
     '--log-level',
         'log_level',
-        metavar="LOGGER:LEVEL",
+        metavar="LOGGER=LEVEL",
         help="Override logging level for given logger",
         multiple=True)
 def cli(ctx, verbose, devel, cfg, backend, apryse_token, font_file, log_level):
@@ -135,7 +135,7 @@ def cli(ctx, verbose, devel, cfg, backend, apryse_token, font_file, log_level):
         logging.getLogger("d.trace").setLevel("ERROR")
 
     for kv in log_level:
-        s = kv.split(":")
+        s = kv.split("=")
         logging.getLogger( s[0] ).setLevel( s[1] )
         
     # overwrite with supplied configs

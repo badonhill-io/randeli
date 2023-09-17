@@ -5,8 +5,9 @@ from dataclasses import dataclass
 import random
 import json
 import pydantic
+import pprint
 
-from .. librandeli.trace import tracer as FTRACE 
+from .. librandeli.trace import tracer as FTRACE
 
 log_name = "r.l.p.rules"
 
@@ -79,12 +80,14 @@ class Rules:
         self.max_head_len = 4
 
         self.use_strong_text = True
+        self.use_colored_text = False
         self.fallback_font = "Helvetica"
         self.modify_strong_font_size = 0
+        self.colored_text_color = "#011993"
 
         self.font_map = {}
 
-        self.use_strong_box = True
+        self.use_strong_box = False
         self.box_x_scale = 1.0
         self.box_y_scale = 1.0
         self.box_x_offset = 0
@@ -92,8 +95,6 @@ class Rules:
         self.strong_box_height = 0
         self.strong_box_width = 0
 
-        self.use_strong_text_color = True
-        self.strong_text_color = "#011993"
 
         self.use_strong_box_color = True
         self.strong_box_color = "#01199320"
@@ -105,6 +106,12 @@ class Rules:
         self.min_words_in_line = 5
         self.min_lines_in_para = 3
 
+    def __str__(self):
+
+        return pprint.pformat( {
+            k: getattr(self, k) for k, v in self.__class__.__dict__.items() if isinstance(v, property)}, indent=1, depth=1 ) ## depth stops the full fonts_map being dumped (its large)
+
+
     def loadRulesFromDict(self, cfg):
         """Reading th dict from external file is done by caller"""
 
@@ -112,8 +119,11 @@ class Rules:
             if 'policy.use_strong_text' in cfg:
                 self.use_strong_text = pydantic.parse_obj_as(bool,cfg['policy.use_strong_text'])
 
-            if 'policy.use_strong_text_color' in cfg:
-                self.use_strong_text_color = pydantic.parse_obj_as(bool,cfg['policy.use_strong_text_color'])
+            if 'policy.use_colored_text' in cfg:
+                self.use_colored_text = pydantic.parse_obj_as(bool,cfg['policy.use_colored_text'])
+
+            if 'policy.use_colored_text' in cfg:
+                self.use_colored_text= pydantic.parse_obj_as(bool,cfg['policy.use_colored_text'])
 
             if 'policy.use_strong_box_color' in cfg:
                 self.use_strong_box_color = pydantic.parse_obj_as(bool,cfg['policy.use_strong_box_color'])
@@ -177,8 +187,9 @@ class Rules:
             cfg["policy"]["seed"] = self.seed
             cfg["policy"]["use_strong_box"] = self.use_strong_box
             cfg["policy"]["use_strong_text"] = self.use_strong_text
+            cfg["policy"]["use_colored_text"] = self.use_colored_text
             cfg["policy"]["use_strong_box_color"] = self.use_strong_box_color
-            cfg["policy"]["use_strong_text_color"] = self.use_strong_text_color
+            cfg["policy"]["use_colored_text"] = self.use_colored_text
             cfg["policy"]["strong_text_color"] = self.strong_text_color
             cfg["policy"]["strong_box_color"] = self.strong_box_color
             cfg["policy"]["min_head_len"] = self.min_head_len
@@ -200,7 +211,7 @@ class Rules:
             pass
 
 
-    def shouldMarkup(self, word, words_in_line=0, lines_in_para=0 ) -> bool :
+    def shouldAugment(self, word, words_in_line=0, lines_in_para=0 ) -> bool :
         """Returns if 'word' should be marked up
         (taking into account letters, numbers, etc)
 
@@ -210,28 +221,34 @@ class Rules:
 
         cls = word_classes(word)
 
+
         if cls.leading_alphabetic == 0:
             """Does not start with letter -> False"""
-            return False
-
-        if  cls.upper_case > 0 and cls.lower_case == 0 and cls.numeric > 0:
+            ret = False
+        elif  cls.upper_case > 0 and cls.lower_case == 0 and cls.numeric > 0:
             """Only upper-case letters and numbers -> False"""
             # probably an ID of some sort
-            return False
+            ret = False
 
-        if ( cls.upper_case + cls.lower_case ) > cls.numeric:
-            """More letters than numbers -> True"""
-            ret = True
+        else:
+            if ( cls.upper_case + cls.lower_case ) > cls.numeric:
+                """More letters than numbers -> True"""
+                ret = True
 
-        if ( cls.upper_case + cls.lower_case ) > cls.whitespace:
-            """More letters than whitespace -> True"""
-            ret = True
- 
-        if ( cls.upper_case + cls.lower_case ) > cls.punctuation:
-            """More letters than punctuation -> True"""
-            ret = True
+            if ( cls.upper_case + cls.lower_case ) > cls.whitespace:
+                """More letters than whitespace -> True"""
+                ret = True
+            else:
+                ret = False
 
-        # the above only look at the characters in a word, now look at context (overriding any Trues above)
+            if ( cls.upper_case + cls.lower_case ) > cls.punctuation:
+                """More letters than punctuation -> True"""
+                ret = True
+            else:
+                ret = False
+
+        # the above only look at the characters in a word, now look at
+        # context (overriding any Trues above)
 
         if words_in_line > 0 and words_in_line < self.min_words_in_line:
             ret = False
@@ -240,6 +257,7 @@ class Rules:
             ret = False
 
         """All other combinations not marked up"""
+        self.logger.detail(f"Augment '{word}' ? {ret} | {cls} {words_in_line} {lines_in_para}")
         return ret
 
     def getStrongFontPath(self, base_font_name : str, italic : bool, size : int) -> str: 
@@ -274,8 +292,9 @@ class Rules:
                 return self.font_map[base_font_name][fnt]
 
         self.devlog.debug(f"Falling back to {self.fallback_font} and {fnt}")
+
         return self.font_map[self.fallback_font][fnt]
-            
+
     def getStrongFontSize(self, size):
         ### Return negitive number to disable modifying the font"""
         if self.use_strong_text:
@@ -285,10 +304,10 @@ class Rules:
             return -1.0
 
 
-    def getStrongTextColor(self):
+    def getColoredTextColor(self):
         ### return an empty string to disable modifying the color
-        if self.use_strong_text_color:
-            return self.strong_text_color
+        if self.use_colored_text:
+            return self.colored_text_color
         else:
             return ""
 
@@ -340,8 +359,8 @@ class Rules:
 
     @fallback_font.setter
     def fallback_font(self, value):
-        self._fallback_font = value   
-    
+        self._fallback_font = value
+
     @property
     def min_head_len(self):
         """Minimum number of characters of 'head' segment """
@@ -350,8 +369,8 @@ class Rules:
     @min_head_len.setter
     def min_head_len(self, value):
         self._min_head_len = value
-    
-    
+
+
     @property
     def max_head_len(self):
         """Minimum number of characters of 'head' segment
@@ -365,17 +384,17 @@ class Rules:
         self._max_head_len = value
 
     @property
-    def strong_font_size_rule(self):
+    def modify_strong_font_size(self):
         """Shoehorning bold chars into limited space can
         cause letters to lose their interword spacing, so
         allow overriding of the font-size for the Strong font
         (-1 seems enough)
         """
-        return self._strong_font_size_rule
+        return self._modify_strong_font_size
 
-    @strong_font_size_rule.setter
-    def strong_font_size_rule(self, value : float):
-        self._strong_font_size_rule = value
+    @modify_strong_font_size.setter
+    def modify_strong_font_size(self, value : float):
+        self._modify_strong_font_size = value
 
     @property
     def seed(self):
@@ -395,12 +414,12 @@ class Rules:
         self._strong_box_color = value
 
     @property
-    def strong_text_color(self):
-        return self._strong_text_color
+    def colored_text_color(self):
+        return self._colored_text_color
 
-    @strong_text_color.setter
-    def strong_text_color(self, value):
-        self._strong_text_color = value
+    @colored_text_color.setter
+    def colored_text_color(self, value):
+        self._colored_text_color = value
 
     @property
     def use_strong_text(self):
@@ -411,12 +430,12 @@ class Rules:
         self._use_strong_text = pydantic.parse_obj_as(bool,value)
 
     @property
-    def use_strong_text_color(self):
-        return self._use_strong_color
+    def use_colored_text(self):
+        return self._use_colored_text
 
-    @use_strong_text_color.setter
-    def use_strong_text_color(self, value):
-        self._use_strong_color = pydantic.parse_obj_as(bool,value)
+    @use_colored_text.setter
+    def use_colored_text(self, value):
+        self._use_colored_text = pydantic.parse_obj_as(bool,value)
 
     @property
     def min_words_in_line(self):

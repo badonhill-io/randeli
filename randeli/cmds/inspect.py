@@ -51,7 +51,9 @@ def cli(ctx, read_, fonts, page, override ):
     @FTRACE
     def beginPageCB(msg:randeli.librandeli.notify.BeginPage):
 
-        LOGGER.notice(f"Page {msg.page_number} / {msg.page_count}")
+        bbox = msg.bbox
+
+        LOGGER.notice(f"Page {msg.page_number} / {msg.page_count} ( {bbox['x1']},{bbox['y1']} {bbox['x2']},{bbox['y2']} )")
 
     @FTRACE
     def elementCB(msg:randeli.librandeli.notify.Element):
@@ -59,7 +61,9 @@ def cli(ctx, read_, fonts, page, override ):
         if ctx.obj['page'] != 0 and  ctx.obj['page'] != msg.page_number:
             return
 
-        LOGGER.info(f"Element {msg.ele_idx} {msg.ele_type_str} ({msg.ele_type})")
+        bbox = msg.bbox
+
+        LOGGER.info(f"Element {msg.ele_idx} {msg.ele_type_str} ({msg.ele_type}) ( {bbox['x1']},{bbox['y1']} {bbox['x2']},{bbox['y2']} )")
 
         if msg.ele_type_str == "image":
             img = backend.getImageDetails(msg.element)
@@ -69,7 +73,7 @@ def cli(ctx, read_, fonts, page, override ):
             td = backend.getTextDetails(msg.element)
             LOGGER.detail(f"  text = {td['text']}")
             if ctx.obj['fonts']:
-                LOGGER.detail(f"  font = {td['font-family']}")
+                LOGGER.detail(f"  font = {td['font-family']} (type={td['font-type']})")
 
             pass
 
