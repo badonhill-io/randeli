@@ -3,6 +3,7 @@ import sys
 import configobj
 import pathlib
 import json
+import re
 
 import logging
 import logging.config
@@ -11,6 +12,7 @@ import click
 
 import randeli
 from randeli.librandeli.trace import tracer as FTRACE 
+from .config import write_config_value_to_file
 
 logging.config.dictConfig( randeli.LOGGING )
 
@@ -30,32 +32,56 @@ DEVLOG = logging.getLogger("d.devel")
         metavar="DIR",
         type=click.Path(exists=True),
         help="Parse fonts rooted at DIR",
+        default=["/Library/Fonts/", "/System/Library/Fonts/", f'{os.environ.get("HOME", "")}/Library/Fonts'],
         required=True,
         multiple=True)
 @click.option(
     '--fallback-font',
         'fallback_font',
-        default="CMU Serif",
+        default="None",
         metavar="NAME",
-        help="Font NAME if font can't be founf mapping" )
+        help="Font NAME if font can't be found mapping" )
 @click.option(
     '--computer-modern',
         'cm_alias',
-        metavar="NAME",
+        metavar="ALIAS",
         default="CMU",
-        help="Alias 'Computer Modern' to NAME")
+        help="Alias 'Computer Modern' to ALIAS")
 @click.option(
     '--update-config',
         'update_config',
         is_flag=True,
         help="Add specified font-map-file into configuration file")
+@click.option(
+    '--alias',
+        'alias',
+        metavar="ALIAS:FONTNAME",
+        default=["LMRoman:Latin Modern Roman"],
+        help="ALIAS aliased to 'FONTNAME'",
+        multiple=True)
+@click.option(
+    '--echo',
+        'echo',
+        is_flag=True,
+        help="Display font names/styles")
 @click.pass_context
-def cli(ctx, font_file, font_dir, fallback_font, cm_alias, update_config ):
-    """Build a font map from querying each DIR"""
+def cli(ctx, font_file, font_dir, fallback_font, cm_alias, update_config, alias, echo):
+    """Build a font map from querying each specified DIR
+
+        Use --alias ALIAS:FONTNAME as a generic font mapper.
+
+        i.e. --alias 'LMRoman:Latin Modern'
+
+    """
 
     from fontTools import ttLib
 
     fonts = {}
+
+    aliases = []
+
+    for a in alias:
+        aliases.append( a )
 
     for dir_ in font_dir:
 
@@ -77,6 +103,18 @@ def cli(ctx, font_file, font_dir, fallback_font, cm_alias, update_config ):
                         family_name = str( font['name'].getDebugName(1) )
                         style_name = str( font['name'].getDebugName(2) )
 
+                        # handle Latin Modern Roman which embeds the point size 
+                        # in the style, i.e. 
+                        #   [LMRoman][10 Bold]
+                        # -> 
+                        #   [LMRoman10][Bold]
+
+                        match = re.search("(\d+) (.+)", style_name)
+                        if match:
+
+                            family_name = family_name + match.group(1)
+                            style_name = match.group(2)
+
                         if family_name not in fonts:
                             fonts[ family_name ] = {}
 
@@ -91,6 +129,29 @@ def cli(ctx, font_file, font_dir, fallback_font, cm_alias, update_config ):
 
                 else:
                     LOGGER.warn(f"{path_to_font} is not a supported font type")
+
+    for alias in aliases:
+
+        (to,frm) = alias.split(':')
+
+        for basename, styles in list(fonts.items()):
+
+            if frm in basename:
+                alias = basename.replace(frm, to)
+
+                if alias not in fonts:
+                    fonts[alias] = {}
+            
+                for style, path in styles.items():
+                    fonts[alias][style] = path
+
+
+    if echo:
+        for font,styles in fonts.items():
+            click.echo(f"{font}")
+            for style,path in styles.items():
+                click.echo(f"  {style}")
+
 
     with open( font_file, "w") as out:
         json.dump(fonts, out, indent=2, sort_keys=True)

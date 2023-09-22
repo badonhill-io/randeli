@@ -250,10 +250,10 @@ class Rules:
         # the above only look at the characters in a word, now look at
         # context (overriding any Trues above)
 
-        if words_in_line > 0 and words_in_line < self.min_words_in_line:
+        if words_in_line > 0 and words_in_line <= self.min_words_in_line:
             ret = False
 
-        if lines_in_para > 0 and lines_in_para < self.min_lines_in_para:
+        if lines_in_para > 0 and lines_in_para <= self.min_lines_in_para:
             ret = False
 
         """All other combinations not marked up"""
@@ -282,16 +282,19 @@ class Rules:
                         fnt = "Bold Italic"
                     if "BoldItalic" in  self.font_map[self.fallback_font]:
                         fnt = "BoldItalic"
+
         except Exception as e:
             self.logger.exception(e)
 
         if base_font_name in self.font_map:
             if fnt in self.font_map[base_font_name]:
-                self.devlog.debug(f"Found base font {base_font_name} and {fnt} in mapping")
+                self.devlog.debug(f"Found base font {base_font_name} and {fnt} in mapping italic={italic}")
 
                 return self.font_map[base_font_name][fnt]
+            else:
+                self.devlog.debug(f"Could not find {fnt} in {base_font_name}")
 
-        self.devlog.debug(f"Falling back to {self.fallback_font} and {fnt}")
+        self.devlog.debug(f"Could not find {base_font_name} defaulting to {self.fallback_font} and {fnt}")
 
         return self.font_map[self.fallback_font][fnt]
 

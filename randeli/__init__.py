@@ -60,7 +60,7 @@ LOGGING = {
             'propagate': False,
         },
         "r.l": {
-            "level": "DEBUG",
+            "level": "INFO",
             "handlers": [ "cli" ],
             'propagate': False,
         },

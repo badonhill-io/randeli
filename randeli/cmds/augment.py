@@ -20,7 +20,6 @@ class EventHandler:
 
     def __init__(self, ctx=None, backend=None):
         self.overlay_boxes = []
-        self.overlay_boxes = []
 
         self.ctx = ctx
         self.backend = backend
@@ -45,7 +44,8 @@ class EventHandler:
     def endPageCB(self, msg : randeli.librandeli.notify.EndPage):
 
         for box in self.overlay_boxes:
-            DEVLOG.info(f"writing box {box}")
+            DEVLOG.info(f"writing box @ {box['x']},{box['y']}")
+            DEVLOG.debug(f"  {box}")
             self.backend.drawBox( msg.writer, msg.builder, box)
 
     @FTRACE
@@ -61,6 +61,11 @@ class EventHandler:
         if msg.ele_type_str == "text":
 
             td = self.backend.getTextDetails(msg.element)
+            # TODO - roadmap
+            # Feels like PDFs are splitting words into multiple elements
+            # Can we look at bbox of thi word and next to see if they are
+            # close "enough" that they should be considered a single word
+            # i.e. no augmentation in the second element.
 
             DEVLOG.info(f"Processing '{td['text']}'")
 
@@ -95,9 +100,9 @@ class EventHandler:
 
                     for t in tail_ele:
                         if t.GetType() == 3:
-                            DEVLOG.info(f"tail {t.GetTextString()}")
+                            DEVLOG.detail(f"tail {t.GetTextString()}")
                         else:
-                            DEVLOG.info(f"tail {t.GetType()}")
+                            DEVLOG.detail(f"tail {t.GetType()}")
 
                         self.backend.writeElement( msg.writer, t )
                 else:
@@ -133,22 +138,24 @@ class EventHandler:
 
             if self.ctx['ocr.enabled'] is True:
 
-                LOGGER.error("OCR Enabled")
+                LOGGER.info("Processing image using OCR")
                 imgd = self.backend.getImageDetails(msg.element)
+                LOGGER.debug(f"Image {imgd}")
 
                 if imgd['width'] > self.policy.min_ocr_image_width and imgd['height'] > self.policy.min_ocr_image_height:
 
-                    jsn = self.backend.extractTextFromImage(msg)
+                    jsn = self.backend.extractTextFromImage(msg, out_filename=self.ctx['write'], out_dir=self.ctx['write_dir'])
                     paragraphs = json.loads(jsn)
 
                     opts = {
-                        "box-x-scale": self.policy.box_x_scale,
-                        "box-x-offset": self.policy.box_x_offset,
-                        "box-y-scale": self.policy.box_y_scale,
-                        "box-y-offset": self.policy.box_y_offset,
+                        "img-x-scale": imgd['bbox']['width'] / imgd['width'], #self.policy.box_x_scale,
+                        "img-x-offset": imgd['bbox']['x'] + self.policy.box_x_offset,
+                        "img-y-scale": imgd['bbox']['height'] / imgd['height'], #self.policy.box_y_scale,
+                        "img-y-offset": imgd['bbox']['y'] + self.policy.box_y_offset,
                         "box-color": self.policy.getStrongBoxColor(),
                         # if 0 then look at the word's font-size`
-                        "box-height" : self.policy.strong_box_height,
+                        "box-height" : 5,#self.policy.strong_box_height,
+                        "dpi" : paragraphs['Page'][0]["dpi"],
                     }
 
                     # TODO tidy up interface,
@@ -163,14 +170,14 @@ class EventHandler:
 
                                     splits = self.policy.splitWord( word_obj['text'] )
 
-                                    opts["box-width"] = float(len(splits.head) / len(word_obj['text'])) * word_obj['length']
+                                    opts["box-width"] = float(len(splits.head) / len(word_obj['text']))
 
                                     box = self.backend.newBox( word_obj, style=opts)
 
                                     self.overlay_boxes.append( box )
 
                 else:
-                    LOGGER.detail("Image is smaller than configure minimum OCR size")
+                    LOGGER.warn("Image is smaller than configure minimum OCR size")
 
 
         else:
@@ -223,8 +230,14 @@ class EventHandler:
     '--ocr-mode',
         'ocr_mode',
         type=click.Choice(["page", "element"]),
-        default="page",
+        default="element",
         help="Select OCR Mode")
+@click.option(
+    '--ocr-dpi',
+        'ocr_dpi',
+        type=int,
+        default=96,
+        help="(expert) Tune resolution used in OCR word locations")
 @click.option(
     '--override',
         'override',
@@ -242,7 +255,7 @@ class EventHandler:
         is_flag=True,
         help="Also write a PDF/A file")
 @click.pass_context
-def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, override, keep_files, pdfa ):
+def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, ocr_dpi, override, keep_files, pdfa ):
     """Read a PDF and augment it based on policies"""
 
     ctx.obj['input'] = read_
@@ -254,6 +267,7 @@ def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, 
     ctx.obj['ocr.enabled'] = enable_ocr
     ctx.obj['ocr.engine'] = ocr_engine
     ctx.obj['ocr.mode'] = ocr_mode
+    ctx.obj['ocr.dpi'] = ocr_dpi
 
     ctx.obj['pdfa'] = pdfa
 
@@ -266,6 +280,7 @@ def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, 
         "apryse-ocr" :  False,
         "apryse-libdir" : ctx.obj['ocr.libdir'],
         "keep-files" : ctx.obj['keep-files'],
+        "dpi" : ctx.obj['ocr.dpi']
     }
 
     if ctx.obj['ocr.enabled'] is True and ctx.obj['ocr.engine'] == "apryse":

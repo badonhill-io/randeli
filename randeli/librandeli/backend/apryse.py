@@ -4,6 +4,9 @@ import logging.config
 import math
 import tempfile
 import json
+import string
+import pydantic
+from pathlib import PosixPath
 
 import apryse_sdk as APRYSE
 
@@ -44,9 +47,9 @@ class Apryse(BaseDocument):
         self.logger = logging.getLogger(log)
         self.devlog = logging.getLogger("d.devel")
 
-        # Use whole page for OCR, or each image element?
-
         self._ocr_options = None
+
+        self.fonts = None
 
         if "apryse-token" not in self.options or self.options["apryse-token"] == "":
             self.logger.fatal("Missing Apryse API key")
@@ -59,7 +62,7 @@ class Apryse(BaseDocument):
 
                 self._ocr_options = APRYSE.OCROptions()
                 self._ocr_options.SetUsePDFPageCoords(True);
-                self._ocr_options.AddDPI(72);
+                self._ocr_options.AddDPI(options["dpi"]);
 
                 if self.options.get("apryse-libdir", ""):
 
@@ -67,7 +70,7 @@ class Apryse(BaseDocument):
 
                     APRYSE.PDFNet.AddResourceSearchPath(self._ocrdir)
                     self.logger.info(f"OCR has been enabled")
-                    self.logger.error(f" libdir = {self._ocrdir}")
+                    self.logger.debug(f" libdir = {self._ocrdir}")
 
                 else:
                     self.logger.error("OCR has been requested, but no ocr.libdir is set")
@@ -86,6 +89,8 @@ class Apryse(BaseDocument):
     @FTRACE
     def loadDocument(self, filename=""):
         super().loadDocument(filename)
+
+        self.fonts = {}
 
         self.document = APRYSE.PDFDoc( self.read_file )
 
@@ -218,7 +223,6 @@ class Apryse(BaseDocument):
         # standardize generation of save pathname
         super().saveDocument(filename=filename, in_dir=in_dir)
 
-        self.logger.info(f"Saving to {self.save_file}")
 
         info = self.document.GetDocInfo()
         producer = info.GetProducer()
@@ -227,7 +231,46 @@ class Apryse(BaseDocument):
         d.SetCurrentTime()
         info.SetModDate( d )
 
+
+        # WIP
+        # idea to improve missing font handling
+        # bypass font-subsets by creating new page that has all chars
+        # for each of the document fonts...
+        if True:
+
+            writer = APRYSE.ElementWriter()
+
+            # Start a new page ------------------------------------
+            page = self.document.PageCreate(APRYSE.Rect(0, 0, 595, 842))
+
+            writer.Begin(page)  # begin writing to the page
+
+            builder = APRYSE.ElementBuilder()
+
+            builder.Reset()
+        
+            element = builder.CreateTextBegin()
+            element.SetTextMatrix(1.5, 0, 0, 1.5, 50, 600)
+            element.GetGState().SetLeading(15)
+            writer.WriteElement(element)
+
+            for (sz,name),fnt in self.fonts.items():
+
+                element = builder.CreateTextRun(string.printable)
+                gs = element.GetGState()
+                gs.SetFont(fnt, sz)
+                writer.WriteElement(element)
+
+                writer.WriteElement(builder.CreateTextNewLine())
+                writer.WriteElement(builder.CreateTextNewLine())
+
+            writer.WriteElement(builder.CreateTextEnd())
+
+            writer.End()
+            self.document.PagePushBack(page)
+
         self.document.Save(self.save_file, APRYSE.SDFDoc.e_remove_unused )
+        self.logger.info(f"Saved to {self.save_file}")
 
         if pdfa:
             pdfa_file = self.save_file.replace(".pdf", "_PDFA.pdf")
@@ -247,10 +290,14 @@ class Apryse(BaseDocument):
         h = ele.GetImageHeight()
         w = ele.GetImageWidth()
         return {
-            "x" : int(rect.GetX1()),
-            "y" : int(rect.GetY1()),
-            "width" : int(rect.GetX2() - rect.GetX1()) ,
-            "height" : int(rect.GetY2() - rect.GetY1())
+            "width" : w ,
+            "height" : h,
+            "bbox" : {
+                "x" : int(rect.GetX1()),
+                "y" : int(rect.GetY1()),
+                "width" : int(rect.GetX2() - rect.GetX1()) ,
+                "height" : int(rect.GetY2() - rect.GetY1()),
+            }
         }
 
     @FTRACE
@@ -261,6 +308,8 @@ class Apryse(BaseDocument):
         font_family = fnt.GetFamilyName() or fnt.GetName()
         name = fnt.GetName() or fnt.GetFamilyName()
         sz = ele.GetGState().GetFontSize()
+
+        self.fonts[(sz,name)] =  fnt
 
         desc = fnt.GetDescriptor()
         italic = fnt.IsItalic()
@@ -399,15 +448,18 @@ class Apryse(BaseDocument):
 
         desc = {}
 
-        desc["height"] = 0
-
-        if "box-height" in style:
-            desc["height"] = style['box-height']
-
-        if desc["height"] == 0:
-            desc["height"] = obj["font-size"]
+        # obj is the demensions we get from OCR (needs DPI correction)
+        # style is policy based
+        DEVLOG.info(f"Word @ {obj}")
+        DEVLOG.info(f"Style @ {style}")
 
         desc["width"] = 0
+        desc["height"] = 0
+
+        ocr_scale = 1.0
+
+        if "dpi" in self.options:
+            ocr_scale =  self.options["dpi"] / 72.0
 
         if "box-width" in style:
             desc["width"] = style['box-width']
@@ -417,21 +469,38 @@ class Apryse(BaseDocument):
             desc["width"] = style['box-width'] * ( obj['length'] )
 
 
-        box_x_scale = 1.0
-        box_y_scale = 1.0
-        box_x_offset = 0.0
-        box_y_offset = 0.0
-        if "box-x-scale" in style:
-            box_x_style = style['box-x-scale']
-        if "box-y-scale" in style:
-            box_y_style = style['box-y-scale']
-        if "box-x-offset" in style:
-            box_x_offset = style['box-x-offset']
-        if "box-y-offset" in style:
-            box_y_offset = style['box-y-offset']
 
-        desc["x"] = ( box_x_scale * obj['x'] ) + box_x_offset
-        desc["y"] = ( box_y_scale * obj['y'] ) + box_y_offset
+        # img_* are from the image that was OCR'd
+        # From experiment, the image is store in the element at original
+        # resolution, but the element bbox may be smaller.
+        # OCR reports the word coords based on original resolution
+        img_x_scale = 1.0
+        img_y_scale = 1.0
+        img_x_offset = 0.0
+        img_y_offset = 0.0
+
+        if "img-x-scale" in style:
+            img_x_scale = style['img-x-scale']
+        if "img-y-scale" in style:
+            img_y_scale = style['img-y-scale']
+
+        if "img-x-offset" in style:
+            img_x_offset = style['img-x-offset']
+        if "img-y-offset" in style:
+            img_y_offset = style['img-y-offset']
+
+        desc["width"] = desc["width"] * img_x_scale * ocr_scale
+
+        if "box-height" in style:
+            desc["height"] = style['box-height']
+
+        if desc["height"] == 0:
+            desc["height"] = obj["font-size"] * img_y_scale
+
+        desc["x"] = ( ocr_scale * img_x_scale * obj['x'] ) + img_x_offset
+        desc["y"] = ( ocr_scale * img_y_scale * obj['y'] ) + img_y_offset
+
+        DEVLOG.info(f"Box @ {desc}")
 
         if "box-color" in style:
             desc["rgb"] = self._txt_to_rgb(style['box-color'])
@@ -439,7 +508,7 @@ class Apryse(BaseDocument):
         return desc
 
     @FTRACE
-    def extractTextFromImage(self, msg) -> str:
+    def extractTextFromImage(self, msg, out_filename="", out_dir="") -> str:
         """Returns JSON string containing nested objects
         {
             "Page": [
@@ -533,10 +602,18 @@ class Apryse(BaseDocument):
                     ocr = _process_element_as_ocr(msg.element, tmp)
 
         else:
-            png = f"{self.read_file}.{msg.page_number}-{msg.ele_idx}.png"
+
+            base = PosixPath(self.read_file).name
+            if out_dir:
+                base = PosixPath(out_dir, base)
+            if out_filename:
+                base = PosixPath(out_filename)
+
+            png = f"{base}.{msg.page_number}-{msg.ele_idx}.png"
+
             with open(png,"w") as tmp:
 
-                LOGGER.debug(f"Extracting intermediate image to {png}")
+                LOGGER.info(f"Extracting intermediate image to {png}")
 
                 if self.options.get("ocr-whole-page", True) is True:
                     ocr = _process_page_as_ocr(msg.page, tmp)

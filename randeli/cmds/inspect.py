@@ -67,7 +67,7 @@ def cli(ctx, read_, fonts, page, override ):
 
         if msg.ele_type_str == "image":
             img = backend.getImageDetails(msg.element)
-            LOGGER.detail(f"  image size = {img['width']} x {img['height']}")
+            LOGGER.detail(f"  image details = {img}")
 
         if msg.ele_type_str == "text":
             td = backend.getTextDetails(msg.element)
