@@ -1,3 +1,4 @@
+--extra-index-url=https://pypi.apryse.com
 annotated-types==0.5.0
 apryse-sdk==10.4.0
 certifi==2023.7.22

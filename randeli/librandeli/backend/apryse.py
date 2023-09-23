@@ -461,6 +461,9 @@ class Apryse(BaseDocument):
         if "dpi" in self.options:
             ocr_scale =  self.options["dpi"] / 72.0
 
+        if "dpi" in style:
+            ocr_scale =  style["dpi"] / 72.0
+
         if "box-width" in style:
             desc["width"] = style['box-width']
 
@@ -604,6 +607,7 @@ class Apryse(BaseDocument):
         else:
 
             base = PosixPath(self.read_file).name
+
             if out_dir:
                 base = PosixPath(out_dir, base)
             if out_filename:

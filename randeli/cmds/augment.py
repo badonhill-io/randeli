@@ -44,7 +44,7 @@ class EventHandler:
     def endPageCB(self, msg : randeli.librandeli.notify.EndPage):
 
         for box in self.overlay_boxes:
-            DEVLOG.info(f"writing box @ {box['x']},{box['y']}")
+            DEVLOG.detail(f"writing box @ {int(box['x'])},{int(box['y'])}")
             DEVLOG.debug(f"  {box}")
             self.backend.drawBox( msg.writer, msg.builder, box)
 
@@ -63,7 +63,7 @@ class EventHandler:
             td = self.backend.getTextDetails(msg.element)
             # TODO - roadmap
             # Feels like PDFs are splitting words into multiple elements
-            # Can we look at bbox of thi word and next to see if they are
+            # Can we look at bbox of this word and the next to see if they are
             # close "enough" that they should be considered a single word
             # i.e. no augmentation in the second element.
 
@@ -138,11 +138,12 @@ class EventHandler:
 
             if self.ctx['ocr.enabled'] is True:
 
-                LOGGER.info("Processing image using OCR")
                 imgd = self.backend.getImageDetails(msg.element)
                 LOGGER.debug(f"Image {imgd}")
 
                 if imgd['width'] > self.policy.min_ocr_image_width and imgd['height'] > self.policy.min_ocr_image_height:
+
+                    LOGGER.debug(f"Found image, processing using OCR ({self.ctx['ocr.mode']})")
 
                     jsn = self.backend.extractTextFromImage(msg, out_filename=self.ctx['write'], out_dir=self.ctx['write_dir'])
                     paragraphs = json.loads(jsn)
@@ -154,12 +155,12 @@ class EventHandler:
                         "img-y-offset": imgd['bbox']['y'] + self.policy.box_y_offset,
                         "box-color": self.policy.getStrongBoxColor(),
                         # if 0 then look at the word's font-size`
-                        "box-height" : 5,#self.policy.strong_box_height,
+                        "box-height" : self.policy.strong_box_height,
                         "dpi" : paragraphs['Page'][0]["dpi"],
                     }
 
                     # TODO tidy up interface,
-                    # this is exposing Apryse view into application code.
+                    # this is exposing Apryse view of extracted text into application code.
                     for p in paragraphs['Page'][0]['Para']:
                         for l in p['Line']:
                             for word_obj in l['Word']:
@@ -193,7 +194,9 @@ class EventHandler:
     '-i',
         'read_',
         type=click.Path(exists=True),
-        required=True)
+        metavar="PATH",
+        required=True,
+        help="Read PDF from PATH")
 @click.option(
     '--write',
         'write_',
@@ -202,12 +205,12 @@ class EventHandler:
         required=False,
         help="Save augmented file to PATH")
 @click.option(
-    '--write-dir',
+    '--write-into',
         'write_dir_',
         metavar="DIR",
         type=click.Path(),
         required=False,
-        help="Save augmented file into DIR")
+        help="Save augmented file into DIR (same base filename as input)")
 @click.option(
     '--page',
         'page',
@@ -230,13 +233,13 @@ class EventHandler:
     '--ocr-mode',
         'ocr_mode',
         type=click.Choice(["page", "element"]),
-        default="element",
-        help="Select OCR Mode")
+        default="page",
+        help="Select OCR Mode.")
 @click.option(
     '--ocr-dpi',
         'ocr_dpi',
         type=int,
-        default=96,
+        default=72,
         help="(expert) Tune resolution used in OCR word locations")
 @click.option(
     '--override',
@@ -256,7 +259,21 @@ class EventHandler:
         help="Also write a PDF/A file")
 @click.pass_context
 def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, ocr_dpi, override, keep_files, pdfa ):
-    """Read a PDF and augment it based on policies"""
+    """
+    Read a PDF and augment it based on policies.
+
+    OCR by default has been tuned for full page images (i.e. scanned paper documents, such as patents).
+
+    This can cause issues if your document is a mix of well formed text and
+    in-line images, in that case to avoid duplicated augmentation try:
+
+    `--ocr-mode element`
+
+
+    In either case, if the boxes are drawn at the wrong locations, you might
+    need to try `--ocr-dpi 96`.
+
+    """
 
     ctx.obj['input'] = read_
     ctx.obj['page'] = page

@@ -1,6 +1,6 @@
 
 ---
-fontsize: 11pt
+fontsize: 10pt
 geometry: a4paper
 ...
 
@@ -13,4 +13,3 @@ are supported by different hypervisors. In some embodiments, this
 capability simplifies the management of cloud computing systems
 including software provided by different virtual machine vendors.
 
-![Image 1](abstract.png)
