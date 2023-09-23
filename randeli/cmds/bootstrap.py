@@ -5,6 +5,7 @@ import pathlib
 import json
 import tempfile
 import platform
+import subprocess
 
 import logging
 import logging.config
@@ -14,7 +15,6 @@ import requests
 import click
 
 import randeli
-from randeli.librandeli.trace import tracer as FTRACE 
 from randeli.cmds.config import write_config_value_to_file
 
 LOGGER = logging.getLogger("r.cli")
@@ -59,6 +59,9 @@ def cli(ctx, download):
 
 
     if download:
+
+        click.echo("Installing Apryse PDF SDK")
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'apryse_sdk', '--extra-index-url=https://pypi.apryse.com'])
 
         urls = {
             "Darwin" : "https://www.pdftron.com/downloads/OCRModuleMac.zip",

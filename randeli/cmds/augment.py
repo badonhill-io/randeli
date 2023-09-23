@@ -187,8 +187,29 @@ class EventHandler:
             self.backend.writeElement( msg.writer, msg.element )
 
 
+def print_long_help_and_exit(ctx, param, value):
 
-@click.command("augment", short_help="Write an augmented PDF")
+    if value:
+        click.echo("""
+Read a PDF and write an augment version based on policies.
+
+OCR by default has been tuned for full page images (i.e. scanned
+paper documents, such as patents).
+
+This can cause issues if your document is a mix of well formed
+text and in-line images, in that case to avoid duplicated
+augmentation try:
+
+  `--ocr-mode element`
+
+
+In either case, if the boxes are drawn at the wrong locations, you might
+need to try a different DPI for the OCR mapping to page coordinates, i.e.
+  `--ocr-dpi 96`.
+""")
+        ctx.exit()
+
+@click.command("augment")
 @click.option(
     '--read',
     '-i',
@@ -257,23 +278,18 @@ class EventHandler:
         'pdfa',
         is_flag=True,
         help="Also write a PDF/A file")
-@click.pass_context
+@click.option(
+    '--hints',
+        is_flag=True,
+        default=False,
+        callback=print_long_help_and_exit,
+        is_eager=True,
+        help="Print additional help"
+        )
 def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, ocr_dpi, override, keep_files, pdfa ):
-    """
-    Read a PDF and augment it based on policies.
+    """Write an augmented PDF"""
 
-    OCR by default has been tuned for full page images (i.e. scanned paper documents, such as patents).
-
-    This can cause issues if your document is a mix of well formed text and
-    in-line images, in that case to avoid duplicated augmentation try:
-
-    `--ocr-mode element`
-
-
-    In either case, if the boxes are drawn at the wrong locations, you might
-    need to try `--ocr-dpi 96`.
-
-    """
+    import randeli.librandeli.backend
 
     ctx.obj['input'] = read_
     ctx.obj['page'] = page

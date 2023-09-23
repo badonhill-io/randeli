@@ -1,0 +1,47 @@
+[build-system]
+requires = [
+    "setuptools"
+    , "wheel"
+    #,"setuptools-scm"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "randeli"
+authors = [
+    {name = "Richard Offer", email = "richard@whitequeen.com"},
+]
+description = "Augment PDFs for aiding neurodivergent reading."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "GPLv2"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "requests"
+    , "click"
+    , "configobj"
+    , "event-notifier"
+    , "fonttools"
+    , "pydantic"
+    , "urllib3"
+]
+dynamic = ["version"]
+
+[tool.setuptools.dynamic]
+version = { file = "VERSION"}
+
+[tool.setuptools]
+packages = [
+    "randeli"
+    , "randeli.cmds"
+    , "randeli.librandeli"
+    , "randeli.librandeli.backend"
+    , "randeli.policy"
+]
+
+
+[project.scripts]
+randeli = "randeli.cli:cli"
+

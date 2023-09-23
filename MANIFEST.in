@@ -1,0 +1,6 @@
+include run-samples.sh
+include samples/Makefile
+include samples/*.md
+include samples/3rdParty/*.pdf
+include samples/pdflatex/*.pdf
+include samples/xelatex/*.pdf

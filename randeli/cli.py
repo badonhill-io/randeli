@@ -13,7 +13,6 @@ import logging.config
 import click
 
 import randeli
-from randeli.librandeli.trace import tracer as FTRACE 
 
 configobj.DEFAULTSECT = "global"
 randeli.librandeli.setup_extended_log_levels()
@@ -68,13 +67,17 @@ class RandeliCLI(click.Group):
         help="Select backend PDF library")
 @click.option(
     '--apryse-token',
+        metavar="TOKEN",
         help="API Token for Apryse backend")
 @click.option(
     '--font-map-file', 
         'font_file',
         type=click.Path(),
+        metavar="FILE",
         help="Load font map from FILE",
-        default="fonts.json")
+        default=os.path.join(
+            click.get_app_dir("randeli", force_posix=True),
+            'fonts.json'))
 @click.option(
     '--log-level',
         'log_level',
@@ -86,15 +89,22 @@ def cli(ctx, verbose, devel, cfg, backend, apryse_token, font_file, log_level):
     if ctx.invoked_subcommand is None:
 
         r = RandeliCLI()
-        print(r.get_help(ctx=ctx))
+        click.echo(r.get_help(ctx=ctx))
 
-        print("")
-        print("COMMANDS: ")
+        click.echo("")
+        click.echo("COMMANDS: ")
         cmds = r.list_commands( ctx = ctx) 
         for c in cmds:
             name = c.replace('.py','')
             mod = __import__(f"randeli.cmds.{name}", None, None, ["cli"])
-            print( f"  {name:>10} - {mod.cli.__doc__}" )
+            click.echo( f"  {name:>10} - {mod.cli.__doc__}" )
+        click.echo("""
+For additional help on a command use
+
+    `randeli <CMD> --help`
+or
+    `randeli <CMD> --hints`
+""")
 
     ctx.ensure_object(dict)
 

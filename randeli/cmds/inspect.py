@@ -15,7 +15,15 @@ from randeli.librandeli.trace import tracer as FTRACE
 LOGGER = logging.getLogger("r.cli")
 DEVLOG = logging.getLogger("d.devel")
 
-@click.command("inspect", short_help="Inspect the structure of a PDF")
+def print_long_help_and_exit(ctx, param, value):
+
+    if value is True:
+        click.echo("""
+Inspect the structure of a PDF
+""")
+        ctx.exit()
+
+@click.command("inspect")
 @click.option(
     '--read',
     '-i',
@@ -26,7 +34,7 @@ DEVLOG = logging.getLogger("d.devel")
     '--fonts',
         'fonts',
         is_flag=True,
-        help="Print document font details",
+        help="Print per-element font details",
         default=False)
 @click.option(
     '--page',
@@ -35,10 +43,25 @@ DEVLOG = logging.getLogger("d.devel")
         metavar="NUMBER",
         help="Only inspect page NUMBER",
         default=0)
-@click.option('--override', 'override', metavar="KEY:VALUE", help="Override config values from CLI", multiple=True)
+@click.option(
+    '--override',
+        'override',
+        metavar="KEY:VALUE",
+        help="Override config values from CLI",
+        multiple=True)
+@click.option(
+    '--hints',
+        is_flag=True,
+        default=False,
+        callback=print_long_help_and_exit,
+        help="Print additional help",
+        expose_value=False,
+        is_eager=True)
 @click.pass_context
 def cli(ctx, read_, fonts, page, override ):
     """Read a PDF and report on its structure"""
+
+    import randeli.librandeli.backend
 
     ctx.obj['page'] = page
     ctx.obj['fonts'] = fonts
@@ -53,7 +76,8 @@ def cli(ctx, read_, fonts, page, override ):
 
         bbox = msg.bbox
 
-        LOGGER.notice(f"Page {msg.page_number} / {msg.page_count} ( {bbox['x1']},{bbox['y1']} {bbox['x2']},{bbox['y2']} )")
+        LOGGER.notice(f"Page {msg.page_number} / {msg.page_count}")
+        LOGGER.detail(f"  Bounding Box {bbox['x1']},{bbox['y1']} {bbox['x2']},{bbox['y2']} )")
 
     @FTRACE
     def elementCB(msg:randeli.librandeli.notify.Element):
