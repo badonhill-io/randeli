@@ -47,15 +47,15 @@ KEYS={
     },
     'policy.min_lines_in_para' : {
         "type" : "int",
-        "default" : 3
+        "default" : 1
     },
     'policy.min_ocr_image_height': {
         "type" : "int",
-        "default" : 640
+        "default" : 320
     },
     'policy.min_ocr_image_width' : {
         "type" : "int",
-        "default" : 320
+        "default" : 480
     },
     'policy.min_words_in_line' : {
         "type" : "int",
@@ -254,10 +254,10 @@ class Rules:
         # the above only look at the characters in a word, now look at
         # context (overriding any Trues above)
 
-        if words_in_line > 0 and words_in_line <= self.min_words_in_line:
+        if words_in_line > 0 and words_in_line < self.min_words_in_line:
             ret = False
 
-        if lines_in_para > 0 and lines_in_para <= self.min_lines_in_para:
+        if lines_in_para > 0 and lines_in_para < self.min_lines_in_para:
             ret = False
 
         """All other combinations not marked up"""
@@ -304,7 +304,7 @@ class Rules:
 
     def getStrongFontSize(self, size):
         ### Return negitive number to disable modifying the font"""
-        if self.use_strong_text:
+        if self.use_strong_text is True:
             DEVLOG.debug(f"Setting (strong) Font size to be {size} + {self.modify_strong_font_size}")
             return size + self.modify_strong_font_size
         else:
@@ -320,7 +320,7 @@ class Rules:
 
     def getStrongBoxColor(self):
         ### return an empty string to disable modifying the color
-        if self.use_strong_box:
+        if self.use_strong_box is True:
             return self.strong_box_color
         else:
             return ""
@@ -456,6 +456,14 @@ class Rules:
         self._use_strong_text = pydantic.parse_obj_as(bool,value)
 
     @property
+    def use_strong_box(self):
+        return self._use_strong_box
+
+    @use_strong_box.setter
+    def use_strong_box(self, value):
+        self._use_strong_box = pydantic.parse_obj_as(bool,value)
+
+    @property
     def use_colored_text(self):
         return self._use_colored_text
 
@@ -479,7 +487,51 @@ class Rules:
     def min_lines_in_para(self, value):
         self._min_lines_in_para = value
 
+    @property
+    def box_x_scale(self):
+        return self._box_x_scale
 
+    @box_x_scale.setter
+    def box_x_scale(self, value):
+        self._box_x_scale = value
 
+    @property
+    def box_x_offset(self):
+        return self._box_x_offset
 
+    @box_x_offset.setter
+    def box_x_offset(self, value):
+        self._box_x_offset = value
+
+    @property
+    def box_y_scale(self):
+        return self._box_y_scale
+
+    @box_y_scale.setter
+    def box_y_scale(self, value):
+        self._box_y_scale = value
+
+    @property
+    def box_y_offset(self):
+        return self._box_y_offset
+
+    @box_y_offset.setter
+    def box_y_offset(self, value):
+        self._box_y_offset = value
+
+    @property
+    def min_ocr_image_height(self):
+        return self._min_ocr_image_height
+
+    @min_ocr_image_height.setter
+    def min_ocr_image_height(self, value):
+        self._min_ocr_image_height = value
+
+    @property
+    def min_ocr_image_width(self):
+        return self._min_ocr_image_width
+
+    @min_ocr_image_width.setter
+    def min_ocr_image_width(self, value):
+        self._min_ocr_image_width = value
 

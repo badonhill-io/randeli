@@ -39,7 +39,7 @@ function augment()
         
         if [ "${base}" == "mixed.pdf" ]
         then
-            args="--ocr --ocr-mode element"
+            args="--ocr --ocr-mode element --ocr-dpi 96"
         fi
 
         # try this???

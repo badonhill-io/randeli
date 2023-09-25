@@ -214,7 +214,7 @@ class EventHandler:
                                     self.overlay_boxes.append( box )
 
                 else:
-                    LOGGER.warn("Image is smaller than configure minimum OCR size")
+                    LOGGER.warn(f"Image is smaller than configure minimum OCR size; {imgd['width']}x{imgd['height']} vs {self.policy.min_ocr_image_width}x{self.policy.min_ocr_image_height}")
 
 
         else:
@@ -302,14 +302,14 @@ need to try a different DPI for the OCR mapping to page coordinates, i.e.
     '--override',
         'override',
         metavar="KEY:VALUE",
-        help="Override config values from CLI",
+        help="Override config values for this run",
         multiple=True)
 @click.option(
     '--keep',
         'keep_files',
         default=BOOTSTRAP_KEYS['augment.keep-files']["default"],
         is_flag=True,
-        help="Keep intermediate OCR files")
+        help="Keep intermediate image files extracted by OCR")
 @click.option(
     '--pdfa',
         'pdfa',

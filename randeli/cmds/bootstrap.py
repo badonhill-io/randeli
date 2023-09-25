@@ -59,7 +59,7 @@ def cli(ctx, download):
             "# use_strong_text -> use a bold font to highlight the start of words (dynamic font)",
             "# use_colored_text -> use a color to highlight the start of words (using colored_text_color)",
             "# use_strong_box -> draw a box at start of words (using strong_box_color)",
-            "# strong_box_shape -> default is "box", but "overbar" and "underbar" are options",
+            "# strong_box_shape -> default is 'box', but 'overbar' and 'underbar' are options",
             "#   set strong_box_height to a non-zero fixed height (i.e. ~4) for overbar/underbar",
         ]
 
