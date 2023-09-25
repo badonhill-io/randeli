@@ -77,6 +77,14 @@ KEYS={
         "type" : "str",
         "default" : "#01199330"
     },
+    'policy.strong_box_height' : {
+        "type" : "int",
+        "default" : 0
+    },
+    'policy.strong_box_shape' : {
+        "type" : "str",
+        "default" : "box" # "box", "underbar", "overbar"
+    },
     'policy.use_strong_text' : {
         "type" : "bool",
         "default" : True
@@ -312,7 +320,7 @@ class Rules:
 
     def getStrongBoxColor(self):
         ### return an empty string to disable modifying the color
-        if self.use_strong_box_color:
+        if self.use_strong_box:
             return self.strong_box_color
         else:
             return ""
@@ -414,6 +422,22 @@ class Rules:
     @strong_box_color.setter
     def strong_box_color(self, value):
         self._strong_box_color = value
+
+    @property
+    def strong_box_height(self):
+        return self._strong_box_height
+
+    @strong_box_height.setter
+    def strong_box_height(self, value):
+        self._strong_box_height = value
+
+    @property
+    def strong_box_shape(self):
+        return self._strong_box_shape
+
+    @strong_box_shape.setter
+    def strong_box_shape(self, value):
+        self._strong_box_shape = value
 
     @property
     def colored_text_color(self):

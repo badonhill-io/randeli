@@ -56,9 +56,11 @@ def cli(ctx, download):
         config["policy"] = {}
 
         config.comments["policy"] = [
-            "# use_strong_text -> use a (dynamic) bold font to highlight the start of words",
+            "# use_strong_text -> use a bold font to highlight the start of words (dynamic font)",
             "# use_colored_text -> use a color to highlight the start of words (using colored_text_color)",
-            "# use_strong_box -> draw a box around the start of words (using strong_box_color)",
+            "# use_strong_box -> draw a box at start of words (using strong_box_color)",
+            "# strong_box_shape -> default is "box", but "overbar" and "underbar" are options",
+            "#   set strong_box_height to a non-zero fixed height (i.e. ~4) for overbar/underbar",
         ]
 
         for k,t in CLI_KEYS.items():

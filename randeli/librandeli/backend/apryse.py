@@ -378,14 +378,18 @@ class Apryse(BaseDocument):
             rgb = self._txt_to_rgb(style['text-color'])
 
             gs.SetFillColorSpace(APRYSE.ColorSpace.CreateDeviceRGB())
-            gs.SetFillColor(APRYSE.ColorPt(
-                rgb["red"],rgb["green"],rgb["blue"]))
+            gs.SetFillColor(APRYSE.ColorPt( rgb["red"],rgb["green"],rgb["blue"]))
+            gs.SetFillOpacity(rgb["alpha"])
 
         return ele
 
     def _txt_to_rgb(self, txt):
 
         c = txt.replace("#", "")
+        c = c.replace('"', "")
+
+        if len(c) < 6:
+            return { "red" : 1.0, "green" : 0.5, "blue" :0.5, "alpha" : 0.5 }
 
         r = int(c[0:2], 16)
         g = int(c[2:4], 16)
@@ -475,42 +479,46 @@ class Apryse(BaseDocument):
             # width is a fraction, so multiply if by overall word length
             desc["width"] = style['box-width'] * ( obj['length'] )
 
-
-
-        # img_* are from the image that was OCR'd
-        # From experiment, the image is store in the element at original
+        # From experiment, the image is stored in the element at original
         # resolution, but the element bbox may be smaller.
         # OCR reports the word coords based on original resolution
-        img_x_scale = 1.0
-        img_y_scale = 1.0
-        img_x_offset = 0.0
-        img_y_offset = 0.0
+        x_scale = 1.0
+        y_scale = 1.0
+        x_offset = 0.0
+        y_offset = 0.0
 
-        if "img-x-scale" in style:
-            img_x_scale = style['img-x-scale']
-        if "img-y-scale" in style:
-            img_y_scale = style['img-y-scale']
+        if "x-scale" in style:
+            x_scale = style['x-scale']
+        if "y-scale" in style:
+            y_scale = style['y-scale']
 
-        if "img-x-offset" in style:
-            img_x_offset = style['img-x-offset']
-        if "img-y-offset" in style:
-            img_y_offset = style['img-y-offset']
+        if "x-offset" in style:
+            x_offset = style['x-offset']
+        if "y-offset" in style:
+            y_offset = style['y-offset']
 
-        desc["width"] = desc["width"] * img_x_scale * ocr_scale
+        desc["width"] = desc["width"] * x_scale * ocr_scale
 
         if "box-height" in style:
             desc["height"] = style['box-height']
 
         if desc["height"] == 0:
-            desc["height"] = obj["font-size"] * img_y_scale
+            desc["height"] = obj["font-size"] * y_scale
 
-        desc["x"] = ( ocr_scale * img_x_scale * obj['x'] ) + img_x_offset
-        desc["y"] = ( ocr_scale * img_y_scale * obj['y'] ) + img_y_offset
+        desc["x"] = ( ocr_scale * x_scale * obj['x'] ) + x_offset
+        desc["y"] = ( ocr_scale * y_scale * obj['y'] ) + y_offset
 
-        DEVLOG.info(f"Box @ {desc}")
+        if "box-shape" in style:
+
+            if style["box-shape"] == "overbar":
+                desc["y"] = desc["y"] + ( obj["font-size"] * y_scale ) - style['box-height']
+            if style["box-shape"] == "underbar":
+                desc["y"] = desc["y"] - style['box-height'] - 1
 
         if "box-color" in style:
             desc["rgb"] = self._txt_to_rgb(style['box-color'])
+
+        DEVLOG.info(f"Box @ {desc}")
 
         return desc
 

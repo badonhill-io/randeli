@@ -143,18 +143,19 @@ class EventHandler:
                     self.backend.writeElement( msg.writer, msg.element )
 
                 if self.policy.use_strong_box:
-                    # to avoid co-ordinate clashses mid page, we need to
+                    # to avoid co-ordinate clashes mid page, we need to
                     # split the generation of box cordinates from
                     # creating the box - for that we wait until
                     # after all other elements on the page have been
                     # written
                     opts = {
-                        "box-x-scale": self.policy.box_x_scale,
-                        "box-x-offset": self.policy.box_x_offset,
-                        "box-y-scale": self.policy.box_y_scale,
-                        "box-y-offset": self.policy.box_y_offset,
+                        "x-scale": self.policy.box_x_scale,
+                        "x-offset": self.policy.box_x_offset,
+                        "y-scale": self.policy.box_y_scale,
+                        "y-offset": self.policy.box_y_offset,
                         "box-color": self.policy.getStrongBoxColor(),
                         "box-height" : self.policy.strong_box_height,
+                        "box-shape" : self.policy.strong_box_shape,
                         "box-width" : float(len(splits.head) / len(td['text'])) ,
                     }
 
@@ -178,17 +179,19 @@ class EventHandler:
 
                     LOGGER.debug(f"Found image, processing using OCR ({self.ctx['ocr.mode']})")
 
-                    jsn = self.backend.extractTextFromImage(msg, out_filename=self.ctx['write'], out_dir=self.ctx['augment.write-into'])
+                    jsn = self.backend.extractTextFromImage(msg,
+                                                            out_filename=self.ctx['write'],
+                                                            out_dir=self.ctx['augment.write-into'])
                     paragraphs = json.loads(jsn)
 
                     opts = {
-                        "img-x-scale": imgd['bbox']['width'] / imgd['width'], #self.policy.box_x_scale,
-                        "img-x-offset": imgd['bbox']['x'] + self.policy.box_x_offset,
-                        "img-y-scale": imgd['bbox']['height'] / imgd['height'], #self.policy.box_y_scale,
-                        "img-y-offset": imgd['bbox']['y'] + self.policy.box_y_offset,
-                        "box-color": self.policy.getStrongBoxColor(),
-                        # if 0 then look at the word's font-size`
+                        "x-scale": imgd['bbox']['width'] / imgd['width'],
+                        "x-offset": imgd['bbox']['x'] + self.policy.box_x_offset,
+                        "y-scale": imgd['bbox']['height'] / imgd['height'],
+                        "y-offset": imgd['bbox']['y'] + self.policy.box_y_offset,
+                        "box-color": self.policy.strong_box_color,
                         "box-height" : self.policy.strong_box_height,
+                        "box-shape" : self.policy.strong_box_shape,
                         "dpi" : paragraphs['Page'][0]["dpi"],
                     }
 
