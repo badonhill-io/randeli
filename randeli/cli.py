@@ -1,4 +1,9 @@
 #! /usr/bin/env python3
+#
+# Copyright (c) 2023 Richard Offer, All rights reserved.
+
+# CLI driver for the randeli application
+
 
 import os
 import sys
@@ -21,9 +26,48 @@ logging.config.dictConfig( randeli.LOGGING )
 LOGGER = logging.getLogger("r.cli")
 DEVLOG = logging.getLogger("d.devel")
 
+TOPDIR = str(pathlib.PosixPath(randeli.__file__).parent)
+CFG = os.path.join(
+        click.get_app_dir("randeli", force_posix=True),
+        'config.ini')
+
+FONTMAP = os.path.join(
+        click.get_app_dir("randeli", force_posix=True),
+        'fonts.json')
+
+BOOTSTRAP_KEYS = {
+    'global.verbose' : {
+        "type" : "int",
+        "default" : 10
+    },
+    'global.backend' : {
+        "type" : "str",
+        "default" : "apryse"
+    },
+    'global.cfg' : {
+        "type" : "str",
+        "default" : CFG
+    },
+    'global.devel' : {
+        "type" : "bool",
+        "default" : False
+    },
+    'global.top' : {
+        "type" : "str",
+        "default" : TOPDIR
+    },
+    'policy.font-map-file' : {
+        "type" : "str",
+        "default" : FONTMAP
+    },
+    'apryse.token' : {
+        "type" : "str",
+        "default" : "NOTSET"
+    },
+}
+
 
 cmd_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), "cmds"))
-
 
 class RandeliCLI(click.Group):
     def list_commands(self, ctx):
@@ -57,34 +101,31 @@ class RandeliCLI(click.Group):
         type=click.Path(),
         required=False,
         help="Path to configuration file",
-        default=os.path.join(
-            click.get_app_dir("randeli", force_posix=True),
-            'config.ini'))
+        default=CFG )
 @click.option(
     '--backend',
         type=click.Choice(["apryse"]),
-        default="apryse",
+        default=BOOTSTRAP_KEYS['global.backend']["default"],
         help="Select backend PDF library")
 @click.option(
-    '--apryse-token',
-        metavar="TOKEN",
-        help="API Token for Apryse backend")
-@click.option(
     '--font-map-file', 
-        'font_file',
         type=click.Path(),
         metavar="FILE",
-        help="Load font map from FILE",
-        default=os.path.join(
-            click.get_app_dir("randeli", force_posix=True),
-            'fonts.json'))
+        default=FONTMAP,
+        help="Load font map from FILE"
+        )
 @click.option(
     '--log-level',
         'log_level',
         metavar="LOGGER=LEVEL",
         help="Override logging level for given logger",
         multiple=True)
-def cli(ctx, verbose, devel, cfg, backend, apryse_token, font_file, log_level):
+@click.option(
+    '--apryse-token',
+        metavar="TOKEN",
+        default="NOTSET",
+        help="API Token for Apryse backend")
+def cli(ctx, verbose, devel, cfg, backend, font_map_file, log_level, apryse_token):
 
     if ctx.invoked_subcommand is None:
 
@@ -108,7 +149,7 @@ or
 
     ctx.ensure_object(dict)
 
-    ctx.obj['top_dir'] = pathlib.PosixPath(randeli.__file__).parent
+    ctx.obj['global.top'] = str(pathlib.PosixPath(randeli.__file__).parent)
 
     cfg_path = pathlib.Path(cfg)
 
@@ -119,7 +160,7 @@ or
         for k,v in config.dict().items():
             for vv in v:
                 # parse booleans
-                if f"{k}.{vv}" in [ "global.devel", "ocr.enabled" ]:
+                if f"{k}.{vv}" in [ "global.devel", "ocr.enabled", "apryse.pdfa" ]:
                     ctx.obj[f"{k}.{vv}"] = pydantic.parse_obj_as(bool,v[vv])
                 else:
                     ctx.obj[f"{k}.{vv}"] = v[vv]
@@ -131,8 +172,8 @@ or
 
     ctx.obj['global.devel'] = devel
 
-    if font_file:
-        ctx.obj['policy.font-map-file'] = font_file
+    #if font_map_file:
+    ctx.obj['policy.font-map-file'] = font_map_file
 
     font_path = pathlib.Path(ctx.obj['policy.font-map-file'])
 
@@ -152,11 +193,7 @@ or
     if cfg:
         ctx.obj['global.cfg'] = cfg
 
-    if backend:
-        ctx.obj['global.backend'] = backend
-
-    if apryse_token:
-        ctx.obj['apryse.token'] = apryse_token
+    ctx.obj['global.backend'] = backend
 
 
 if __name__ == '__main__':

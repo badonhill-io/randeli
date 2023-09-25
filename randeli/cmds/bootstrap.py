@@ -17,6 +17,9 @@ import click
 import randeli
 from randeli.cmds.config import write_config_value_to_file
 
+from randeli.cli import BOOTSTRAP_KEYS as CLI_KEYS
+from randeli.cmds.augment import BOOTSTRAP_KEYS as AUGMENT_KEYS
+
 LOGGER = logging.getLogger("r.cli")
 DEVLOG = logging.getLogger("d.devel")
 
@@ -30,22 +33,56 @@ def cli(ctx, download):
 
     cfg_path = pathlib.PosixPath(ctx.obj['global.cfg'])
 
-    ocrdir = pathlib.PosixPath(ctx.obj['top_dir'],'ocr')
+    ocrdir = pathlib.PosixPath(ctx.obj['global.top'],'ocr')
     ocrlibdir = ocrdir / "Lib"
 
     if not cfg_path.exists():
 
-        config = configobj.ConfigObj(infile=None, write_empty_values=True)
+        config = configobj.ConfigObj(infile=None, write_empty_values=True, indent_type='  ')
+        config.initial_comment = [
+            "# initially created using randeli bootstrap",
+            "# these represent generally useful defaults",
+            "# ",
+            "# rather than edit this file directly, suggest using",
+            "#   randeli config",
+            "# i.e.",
+            "#   randeli config set apryse.token <API-TOKEN>"
+
+        ]
         config["global"] = {}
-        config["global"]["backend"] = "apryse"
-        config["global"]["verbose"] = 10
-        config["global"]["devel"] = False
         config["apryse"] = {}
-        config["apryse"]["token"] = "NOTSET"
+        config["augment"] = {}
         config["ocr"] = {}
-        config["ocr"]["enabled"] = False
-        config["ocr"]["engine"] = "apryse"
-        config["ocr"]["libdir"] = str(ocrlibdir)
+        config["policy"] = {}
+
+        config.comments["policy"] = [
+            "# use_strong_text -> use a (dynamic) bold font to highlight the start of words",
+            "# use_colored_text -> use a color to highlight the start of words (using colored_text_color)",
+            "# use_strong_box -> draw a box around the start of words (using strong_box_color)",
+        ]
+
+        for k,t in CLI_KEYS.items():
+
+            s = k.split(".")
+
+            if k in ctx.obj:
+                config[s[0]][s[1]] = ctx.obj[k]
+            else:
+                if "default" in CLI_KEYS[k]:
+                    config[s[0]][s[1]] = CLI_KEYS[k]["default"]
+
+        for k,t in AUGMENT_KEYS.items():
+
+            s = k.split(".")
+
+            if k in ctx.obj.items():
+                config[s[0]][s[1]] = ctx.obj[k]
+            else:
+                if "default" in AUGMENT_KEYS[k]:
+                    config[s[0]][s[1]] = AUGMENT_KEYS[k]["default"]
+
+        if config["apryse"].get("token", "") == "":
+            config['apryse']['token'] = "NOTSET"
 
         policy = randeli.policy.Rules()
         policy.saveRulesToDict(config)

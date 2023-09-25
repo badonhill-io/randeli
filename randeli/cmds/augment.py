@@ -3,7 +3,6 @@ import sys
 import configobj
 import pathlib
 import json
-import pprint
 
 import logging
 import logging.config
@@ -15,6 +14,40 @@ from randeli.librandeli.trace import tracer as FTRACE
 
 LOGGER = logging.getLogger("r.cli")
 DEVLOG = logging.getLogger("d.devel")
+
+# these get written during bootstrap
+BOOTSTRAP_KEYS={
+    'apryse.pdfa' : {
+        "type" : "bool",
+        "default" : False
+    },
+    'augment.keep-files' : {
+        "type" : "bool",
+        "default" : False
+    },
+    'augment.write-into' : {
+        "type" : "str"
+    },
+    'ocr.dpi' : {
+        "type" : "int",
+        "default" : 72
+    },
+    'ocr.enabled' : {
+        "type" : "bool",
+        "default" : False
+    },
+    'ocr.engine' : {
+        "type" : "str",
+        "default" : "apryse"
+    },
+    'ocr.libdir' : {
+        "type" : "str"
+    },
+    'ocr.mode' : {
+        "type" : "str",
+        "default" : "page"
+    },
+}
 
 class EventHandler:
 
@@ -145,7 +178,7 @@ class EventHandler:
 
                     LOGGER.debug(f"Found image, processing using OCR ({self.ctx['ocr.mode']})")
 
-                    jsn = self.backend.extractTextFromImage(msg, out_filename=self.ctx['write'], out_dir=self.ctx['write_dir'])
+                    jsn = self.backend.extractTextFromImage(msg, out_filename=self.ctx['write'], out_dir=self.ctx['augment.write-into'])
                     paragraphs = json.loads(jsn)
 
                     opts = {
@@ -187,7 +220,7 @@ class EventHandler:
             self.backend.writeElement( msg.writer, msg.element )
 
 
-def print_long_help_and_exit(ctx, param, value):
+def print_hints(ctx, param, value):
 
     if value:
         click.echo("""
@@ -242,25 +275,25 @@ need to try a different DPI for the OCR mapping to page coordinates, i.e.
     '--ocr',
         'enable_ocr',
         is_flag=True,
-        metavar="KEY:VALUE",
+        default=BOOTSTRAP_KEYS['ocr.enabled']["default"],
         help="Enable OCR")
 @click.option(
     '--ocr-engine',
         'ocr_engine',
         type=click.Choice(["apryse"]),
-        default="apryse",
+        default=BOOTSTRAP_KEYS['ocr.engine']["default"],
         help="Select OCR Engine")
 @click.option(
     '--ocr-mode',
         'ocr_mode',
         type=click.Choice(["page", "element"]),
-        default="page",
+        default=BOOTSTRAP_KEYS['ocr.mode']["default"],
         help="Select OCR Mode.")
 @click.option(
     '--ocr-dpi',
         'ocr_dpi',
         type=int,
-        default=72,
+        default=BOOTSTRAP_KEYS['ocr.dpi']["default"],
         help="(expert) Tune resolution used in OCR word locations")
 @click.option(
     '--override',
@@ -271,22 +304,25 @@ need to try a different DPI for the OCR mapping to page coordinates, i.e.
 @click.option(
     '--keep',
         'keep_files',
+        default=BOOTSTRAP_KEYS['augment.keep-files']["default"],
         is_flag=True,
         help="Keep intermediate OCR files")
 @click.option(
     '--pdfa',
         'pdfa',
+        default=BOOTSTRAP_KEYS['apryse.pdfa']["default"],
         is_flag=True,
         help="Also write a PDF/A file")
 @click.option(
     '--hints',
         is_flag=True,
         default=False,
-        callback=print_long_help_and_exit,
+        callback=print_hints,
         is_eager=True,
         help="Print additional help"
-        )
-def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, ocr_dpi, override, keep_files, pdfa ):
+)
+@click.pass_context
+def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, ocr_dpi, override, keep_files, pdfa, hints ):
     """Write an augmented PDF"""
 
     import randeli.librandeli.backend
@@ -294,26 +330,32 @@ def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, 
     ctx.obj['input'] = read_
     ctx.obj['page'] = page
     ctx.obj['write'] = write_
-    ctx.obj['write_dir'] = write_dir_
-    ctx.obj['keep-files'] = keep_files
+    ctx.obj['augment.write-into'] = write_dir_
+    ctx.obj['augment.keep-files'] = keep_files
 
     ctx.obj['ocr.enabled'] = enable_ocr
     ctx.obj['ocr.engine'] = ocr_engine
     ctx.obj['ocr.mode'] = ocr_mode
     ctx.obj['ocr.dpi'] = ocr_dpi
 
-    ctx.obj['pdfa'] = pdfa
+    ctx.obj['apryse.pdfa'] = pdfa
 
     for kv in override:
         s = kv.split("=")
         ctx.obj[s[0]] = s[1]
 
+    font_map = pathlib.PosixPath( ctx.obj['policy.font-map-file'] )
+
+    if not font_map.exists:
+        LOGGER.fatal(f"Could not open {str(font_map)}")
+
     options = {
         "apryse-token" : ctx.obj['apryse.token'],
-        "apryse-ocr" :  False,
+        "apryse-ocr" :  ctx.obj['ocr.enabled'],
         "apryse-libdir" : ctx.obj['ocr.libdir'],
-        "keep-files" : ctx.obj['keep-files'],
-        "dpi" : ctx.obj['ocr.dpi']
+        "keep-files" : ctx.obj['augment.keep-files'],
+        "write-into" : ctx.obj['augment.write-into'],
+        "dpi" : ctx.obj['ocr.dpi'],
     }
 
     if ctx.obj['ocr.enabled'] is True and ctx.obj['ocr.engine'] == "apryse":
@@ -341,10 +383,8 @@ def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, 
         args = { }
         if write_:
             args["filename" ] = ctx.obj['write']
-        if write_dir_:
-            args["in_dir" ] = ctx.obj['write_dir']
-        if pdfa:
-            args["pdfa" ] = ctx.obj['pdfa']
+        if ctx.obj['apryse.pdfa']:
+            args["pdfa" ] = ctx.obj['apryse.pdfa']
 
         backend.saveDocument( **args )
         backend.finalise()

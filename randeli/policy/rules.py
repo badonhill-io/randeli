@@ -9,7 +9,87 @@ import pprint
 
 from .. librandeli.trace import tracer as FTRACE
 
-log_name = "r.l.p.rules"
+LOGGER = logging.getLogger("r.l.p.rules")
+DEVLOG = logging.getLogger("d.devel")
+
+KEYS={
+    'policy.box_x_scale' : {
+        "type" : "float",
+        "default" : 1.0
+    },
+    'policy.box_y_scale' : {
+        "type" : "float",
+        "default" : 1.0
+    },
+    'policy.box_x_offset' : {
+        "type" : "int",
+        "default" : 0
+    },
+    'policy.box_y_offset' : {
+        "type" : "int",
+        "default" : 0
+    },
+    'policy.fallback-font' : {
+        "type" : "str",
+        "default" : "CMU Serif"
+    },
+    'policy.font-map-file' : {
+        "type" : "str",
+        "default" : None
+    },
+    'policy.max_head_len' : {
+        "type" : "int",
+        "default" : 4
+    },
+    'policy.min_head_len' : {
+        "type" : "int",
+        "default" : 1
+    },
+    'policy.min_lines_in_para' : {
+        "type" : "int",
+        "default" : 3
+    },
+    'policy.min_ocr_image_height': {
+        "type" : "int",
+        "default" : 640
+    },
+    'policy.min_ocr_image_width' : {
+        "type" : "int",
+        "default" : 320
+    },
+    'policy.min_words_in_line' : {
+        "type" : "int",
+        "default" : 5
+    },
+    'policy.modify_strong_font_size' : {
+        "type" : "int",
+        "default" : 0
+    },
+    'policy.seed' : {
+        "type" : "int",
+        "default" : 230901
+    },
+    'policy.colored_text_color' : {
+        "type" : "str",
+        "default" : "#011993"
+    },
+    'policy.strong_box_color' : {
+        "type" : "str",
+        "default" : "#01199330"
+    },
+    'policy.use_strong_text' : {
+        "type" : "bool",
+        "default" : True
+    },
+    'policy.use_colored_text' : {
+        "type" : "bool",
+        "default" : True
+    },
+    'policy.use_strong_box' : {
+        "type" : "bool",
+        "default" : False
+    },
+}
 
 @dataclass
 class WordDetails:
@@ -66,45 +146,21 @@ def word_classes(txt):
 
 class Rules:
 
-    def __init__(self, log=log_name):
+    def __init__(self):
         """
-        Policy Rules for how 'words' are to be handled
+        Policy Rules for how 'words' are to be augmented
         """
-
-        self.logger = logging.getLogger(log)
-        self.devlog = logging.getLogger("d.devel")
-
-        self.seed = 230522
-
-        self.min_head_len = 1
-        self.max_head_len = 4
-
-        self.use_strong_text = True
-        self.use_colored_text = False
-        self.fallback_font = "Helvetica"
-        self.modify_strong_font_size = 0
-        self.colored_text_color = "#011993"
 
         self.font_map = {}
 
-        self.use_strong_box = False
-        self.box_x_scale = 1.0
-        self.box_y_scale = 1.0
-        self.box_x_offset = 0
-        self.box_y_offset = 0
-        self.strong_box_height = 0
-        self.strong_box_width = 0
+        for k,t in KEYS.items():
 
+            field = k.replace("policy.","_").replace("-", "_")
 
-        self.use_strong_box_color = True
-        self.strong_box_color = "#01199320"
-
-        self.min_ocr_image_width = 640
-        self.min_ocr_image_height = 480
-
-        # these apply when we have additional context, i.e. full page OCR
-        self.min_words_in_line = 5
-        self.min_lines_in_para = 3
+            if "default" in KEYS[k]:
+                setattr(self, field, KEYS[k]["default"])
+            else:
+                setattr(self, field, None)
 
     def __str__(self):
 
@@ -113,102 +169,42 @@ class Rules:
 
 
     def loadRulesFromDict(self, cfg):
-        """Reading th dict from external file is done by caller"""
+        """Reading the dict from external file is done by caller"""
 
         try:
-            if 'policy.use_strong_text' in cfg:
-                self.use_strong_text = pydantic.parse_obj_as(bool,cfg['policy.use_strong_text'])
 
-            if 'policy.use_colored_text' in cfg:
-                self.use_colored_text = pydantic.parse_obj_as(bool,cfg['policy.use_colored_text'])
+            for k,v in cfg.items():
 
-            if 'policy.use_colored_text' in cfg:
-                self.use_colored_text= pydantic.parse_obj_as(bool,cfg['policy.use_colored_text'])
+                key = k.replace("policy.","")
+                field = k.replace("policy.","").replace("-", "_")
 
-            if 'policy.use_strong_box_color' in cfg:
-                self.use_strong_box_color = pydantic.parse_obj_as(bool,cfg['policy.use_strong_box_color'])
+                if k in KEYS:
+                    if KEYS[k]["type"] == "int":
+                        setattr(self, field, pydantic.parse_obj_as(int,cfg[k]))
+                    elif KEYS[k]["type"] == "float":
+                        setattr(self, field, pydantic.parse_obj_as(float,cfg[k]))
+                    elif KEYS[k]["type"] == "bool":
+                        setattr(self, field, pydantic.parse_obj_as(bool,cfg[k]))
+                    else:
+                        setattr(self, field, cfg[k] )
 
-            if 'policy.strong_text_color' in cfg:
-                self.strong_text_color = cfg['policy.strong_text_color']
-
-            if 'policy.strong_box_color' in cfg:
-                self.strong_box_color = cfg['policy.strong_box_color']
-
-            if 'policy.seed' in cfg:
-                self.seed = cfg['policy.seed']
-
-            if 'policy.font-map-file' in cfg:
-                self.font_map_file = cfg['policy.font-map-file']
-
-            if 'policy.fallback-font' in cfg:
-                self.fallback_font = cfg['policy.fallback-font']
-
-            if 'policy.min_head_len' in cfg:
-                self.min_head_len = int(cfg["policy.min_head_len"])
-
-            if 'policy.max_head_len' in cfg:
-                self.max_head_len = int(cfg["policy.max_head_len"])
-
-            if 'policy.min_ocr_image_width' in cfg:
-                self.min_ocr_image_width = int(cfg["policy.min_ocr_image_width"])
-
-            if 'policy.min_ocr_image_height' in cfg:
-                self.min_ocr_image_height = int(cfg["policy.min_ocr_image_height"])
-
-            if 'policy.modify_strong_font_size' in cfg:
-                self.modify_strong_font_size = float(cfg["policy.modify_strong_font_size"])
-
-            if 'policy.min_words_in_line' in cfg:
-                self.min_words_in_line = int(cfg["policy.min_words_in_line"])
-
-            if 'policy.min_lines_in_para' in cfg:
-                self.min_lines_in_para = int(cfg["policy.min_lines_in_para"])
-
-            if 'policy.box_x_scale' in cfg:
-                self.box_x_scale = float(cfg["policy.box_x_scale"])
-
-            if 'policy.box_y_scale' in cfg:
-                self.box_y_scale = float(cfg["policy.box_y_scale"])
-
-            if 'policy.box_x_offset' in cfg:
-                self.box_x_offset = float(cfg["policy.box_x_offset"])
-
-            if 'policy.box_y_offset' in cfg:
-                self.box_y_offset = float(cfg["policy.box_y_offset"])
-
-        except:
-            pass
+        except Exception as e:
+            LOGGER.exception(e)
 
     def saveRulesToDict(self, cfg):
         """Writing dict to file is handled in caller"""
 
         try:
             cfg["policy"] = {}
-            cfg["policy"]["seed"] = self.seed
-            cfg["policy"]["use_strong_box"] = self.use_strong_box
-            cfg["policy"]["use_strong_text"] = self.use_strong_text
-            cfg["policy"]["use_colored_text"] = self.use_colored_text
-            cfg["policy"]["use_strong_box_color"] = self.use_strong_box_color
-            cfg["policy"]["use_colored_text"] = self.use_colored_text
-            cfg["policy"]["strong_text_color"] = self.strong_text_color
-            cfg["policy"]["strong_box_color"] = self.strong_box_color
-            cfg["policy"]["min_head_len"] = self.min_head_len
-            cfg["policy"]["max_head_len"] = self.max_head_len
-            cfg["policy"]["min_ocr_image_width"] = self.min_ocr_image_width
-            cfg["policy"]["min_ocr_image_height"] = self.min_ocr_image_height
-            cfg["policy"]["min_words_in_line"] = self.min_words_in_line
-            cfg["policy"]["min_lines_in_para"] = self.min_lines_in_para
-            cfg["policy"]["modify_strong_font_size"] = self.modify_strong_font_size
-            cfg["policy"]["fallback-font"] = self.fallback_font
-            cfg["policy"]["font-map-file"] = self.font_map_file
 
-            cfg["policy"]["box_x_scale"] = self.box_x_scale
-            cfg["policy"]["box_y_scale"] = self.box_y_scale
-            cfg["policy"]["box_x_offset"] = self.box_x_offset
-            cfg["policy"]["box_y_offset"] = self.box_y_offset
+            for k,t in KEYS.items():
+                key = k.replace("policy.","")
+                field = k.replace("policy.","").replace("-", "_")
 
-        except:
-            pass
+                cfg["policy"][key] = getattr(self, field)
+
+        except Exception as e:
+            LOGGER.exception(e)
 
 
     def shouldAugment(self, word, words_in_line=0, lines_in_para=0 ) -> bool :
@@ -257,7 +253,7 @@ class Rules:
             ret = False
 
         """All other combinations not marked up"""
-        self.logger.detail(f"Augment '{word}' ? {ret} | {cls} {words_in_line} {lines_in_para}")
+        LOGGER.detail(f"Augment '{word}' ? {ret} | {cls} {words_in_line} {lines_in_para}")
         return ret
 
     def getStrongFontPath(self, base_font_name : str, italic : bool, size : int) -> str: 
@@ -284,24 +280,24 @@ class Rules:
                         fnt = "BoldItalic"
 
         except Exception as e:
-            self.logger.exception(e)
+            LOGGER.exception(e)
 
         if base_font_name in self.font_map:
             if fnt in self.font_map[base_font_name]:
-                self.devlog.debug(f"Found base font {base_font_name} and {fnt} in mapping italic={italic}")
+                DEVLOG.debug(f"Found base font {base_font_name} and {fnt} in mapping italic={italic}")
 
                 return self.font_map[base_font_name][fnt]
             else:
-                self.devlog.debug(f"Could not find {fnt} in {base_font_name}")
+                DEVLOG.debug(f"Could not find {fnt} in {base_font_name}")
 
-        self.devlog.debug(f"Could not find {base_font_name} defaulting to {self.fallback_font} and {fnt}")
+        DEVLOG.warn(f"Could not find {base_font_name} defaulting to {self.fallback_font} and {fnt}")
 
         return self.font_map[self.fallback_font][fnt]
 
     def getStrongFontSize(self, size):
         ### Return negitive number to disable modifying the font"""
         if self.use_strong_text:
-            self.devlog.debug(f"Setting (strong) Font size to be {size} + {self.modify_strong_font_size}")
+            DEVLOG.debug(f"Setting (strong) Font size to be {size} + {self.modify_strong_font_size}")
             return size + self.modify_strong_font_size
         else:
             return -1.0
@@ -352,8 +348,11 @@ class Rules:
     def font_map_file(self, value):
         self._font_map_file = value
 
-        with open( self._font_map_file, "r") as fonts:
-            self.font_map = json.load(fonts)
+        if value is None:
+            self.font_map = {}
+        else:
+            with open( self._font_map_file, "r") as fonts:
+                self.font_map = json.load(fonts)
 
     @property
     def fallback_font(self):

@@ -1,7 +1,7 @@
 Randeli
 =======
 
-Modify PDFs to help make them easier to read and understand for
+Augment PDFs to help make them easier to read and understand for
 people with ADD/ADHD.
 
 This is primarily targeted at processing academic papers and patents.
@@ -21,7 +21,7 @@ Reading" hold are not applicable where this code was developed (UK,
 USA). The patents that bionic-reading.com filed in the UK and USA
 were withdrawn.
 
-To avoid trademark infringement, randeli will use the term "augmented reading".
+To avoid trademark infringement, randeli will use the term "augmented".
 
 
 A PDF can be augmented using alternate "styles"
@@ -41,8 +41,7 @@ Initially randeli is being developed as a python-based CLI. But a
 web-based UI is on the short term roadmap.
 
 Earlier versions were developed in Go and C++, but those have been
-postponed to get the
-first release out.
+postponed to get the first release out.
 
 As are usability features to help users find the best "augmentation" styles for them.
 
@@ -73,25 +72,27 @@ Text can be a single character, word or line.
 Some PDFs are the result of scanning a paper or other PDF - so any
 text has been rendered into an image.
 
-Well formed DPFs
+Well formed PDFs
 ----------------
 
 If the PDF was created from LaTeX or other document processor (i.e.
 Word) then reasonable results should be obtained using
 
-    `randeli augment --read=PDF --write-to=DIR`
+    `randeli augment --read=PDF --write-into=DIR`
 
 (LaTeX and Word both create well structured PDF and typically use
 standard fonts which makes it easy to enbolden automatically.
 
-PDFs generated from XeLaTeX are still a WIP as they use a different font format in the PDF)
+PDFs generated from XeLaTeX are still a WIP as they use a different
+font format in the PDF (UTF-8 vs UTF-32).
 
 If the input document uses custom fonts that are not installed on
 the system running `randeli` then the font used to strongify the
 characters will use a fallback font and it may be too distracting
 when compared to the rest of the document. In this case you may
 want either load the fonts onto the system and re-run `randeli map-fonts`
-or use `randeli augment` with the flag `--boxify`.
+or use `randeli augment --override 'policy.use_strong_text=False'
+--override 'policy.use_strong_box=True'`.
 
 Scanned PDFs
 ------------
@@ -102,6 +103,11 @@ and then add highlighted boxes at the appropriate position on the
 page using
 
     `randeli augment --read=PDF --write-to=DIR --ocr`
+
+The default OCR assumes that the whole document has been scanned
+so performs OCR on the full page. If pages contain a mix of well-formed
+text and (in-line) images to be be be OCR'ed, then use `--ocr-mode
+element` (rather than the default `--ocr-mode page`).
 
 Font Map
 --------
@@ -118,15 +124,17 @@ Type1 version as PDF supports that type natively.
 
 https://www.fontsquirrel.com/fonts/computer-modern
 
+Another good set is the "Latin Modern Roman" fonts.
+
 
 Getting Started
 ===============
 
 
-1) Create the inital configuration file
+1) Create the inital configuration file and download required Apryse libraries
 
 ```
-randeli setup
+randeli bootstrap --download
 ```
 
 2) Configure the Apryse token - this is required to use the PDF
@@ -147,12 +155,61 @@ randeli config set --key policy.fallback-font --value "CMU Serif"
 4) (one off) Index all the fonts on your system - required before augment any PDFs (technically only required before using font-based augmentation,  but do it now before you forget)
 
 ``` 
-randeli map-fonts \
-    --font-map-file fonts.json \
-    --font-dir ~/Library/Fonts/ \
-    --font-dir /Library/Fonts/ \
-    --font-dir /System/Library/Fonts/ \
-    --update-config
+randeli map-fonts --update-config
+```
+
+
+Randeli Usage
+=============
+
+
+```
+ ] randeli
+Usage: randeli [OPTIONS] COMMAND [ARGS]...
+
+Options:
+  --help  Show this message and exit.
+
+COMMANDS:
+     augment - Write an augmented PDF
+   bootstrap - Initialize randeli configuration
+      config - Read and Write configuration values
+     inspect - Read a PDF and report on its structure
+   map-fonts - Create fonts.map from installed fonts
+
+For additional help on a command use
+
+    `randeli <CMD> --help`
+or
+    `randeli <CMD> --hints`
+```
+
+
+```
+ ] randeli --help
+Usage: randeli [OPTIONS] COMMAND [ARGS]...
+
+Options:
+  -v, --verbose INTEGER     Set system-wide verbosity
+  --devel                   Run in development mode (additional logging)
+  --cfg PATH                Path to configuration file
+  --backend [apryse]        Select backend PDF library
+  --apryse-token TOKEN      API Token for Apryse backend
+  --font-map-file FILE      Load font map from FILE
+  --log-level LOGGER=LEVEL  Override logging level for given logger
+  --help                    Show this message and exit.
+```
+
+
+```
+ ] randeli bootstrap --help
+Usage: randeli bootstrap [OPTIONS]
+
+  Initialize randeli configuration
+
+Options:
+  --download  Download 3rd party components
+  --help      Show this message and exit.
 ```
 
 

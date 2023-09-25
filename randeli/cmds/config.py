@@ -33,13 +33,31 @@ def write_config_value_to_file(key, value, file):
 
     return config[k[0]][k[1]]
 
-@click.command("inspect", short_help="Inspect the structure of a PDF")
-@click.option('--key', 'key_')
-@click.option('--value', 'value_')
-@click.argument('verb' )
+def print_hints(ctx, param, value):
+
+    if value:
+        click.echo("""
+VERB is either `get`, `set` or `list` (the default)
+
+""")
+        ctx.exit()
+
+
+@click.command("config")
+@click.option('--key', 'key_', metavar='KEY')
+@click.option('--value', 'value_', metavar='VALUE')
+@click.option(
+    '--hints',
+        is_flag=True,
+        default=False,
+        callback=print_hints,
+        is_eager=True,
+        help="Print additional help"
+)
+@click.argument('verb', default='list', required=True )
 @click.pass_context
-def cli(ctx, key_, value_, verb ):
-    """Read and Write configuration values"""
+def cli(ctx, key_, value_, verb, hints ):
+    """Handle configuration values"""
 
     if verb == "get":
         click.echo(ctx.obj[key_])

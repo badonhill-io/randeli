@@ -15,6 +15,10 @@ from randeli.librandeli.trace import tracer as FTRACE
 LOGGER = logging.getLogger("r.cli")
 DEVLOG = logging.getLogger("d.devel")
 
+KEYS={
+    'apryse.token' : "str",
+}
+
 def print_long_help_and_exit(ctx, param, value):
 
     if value is True:
@@ -54,13 +58,15 @@ Inspect the structure of a PDF
         is_flag=True,
         default=False,
         callback=print_long_help_and_exit,
-        help="Print additional help",
         expose_value=False,
+        help="Print additional help",
         is_eager=True)
 @click.pass_context
-def cli(ctx, read_, fonts, page, override ):
+def cli(ctx, read_, fonts, page, override):
     """Read a PDF and report on its structure"""
 
+    # delay importing until needed in case the apryse sdk is not yet installed
+    # i.e. pre-bootstrap
     import randeli.librandeli.backend
 
     ctx.obj['page'] = page

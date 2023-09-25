@@ -219,9 +219,13 @@ class Apryse(BaseDocument):
             writer.Flush()
 
     @FTRACE
-    def saveDocument(self, filename="", in_dir="", pdfa=False):
+    def saveDocument(self, filename="", write_into="", pdfa=False):
         # standardize generation of save pathname
-        super().saveDocument(filename=filename, in_dir=in_dir)
+
+        if write_into == "" and self.options['write-into']:
+            write_into = self.options['write-into']
+
+        super().saveDocument(filename=filename, in_dir=write_into)
 
 
         info = self.document.GetDocInfo()
@@ -236,7 +240,7 @@ class Apryse(BaseDocument):
         # idea to improve missing font handling
         # bypass font-subsets by creating new page that has all chars
         # for each of the document fonts...
-        if True:
+        if False:
 
             writer = APRYSE.ElementWriter()
 
@@ -272,7 +276,7 @@ class Apryse(BaseDocument):
         self.document.Save(self.save_file, APRYSE.SDFDoc.e_remove_unused )
         self.logger.info(f"Saved to {self.save_file}")
 
-        if pdfa:
+        if pdfa is True:
             pdfa_file = self.save_file.replace(".pdf", "_PDFA.pdf")
 
 
@@ -333,7 +337,7 @@ class Apryse(BaseDocument):
             "font-type" : fnt.GetType(),
             "x" : rect.GetX1(),
             "y" : rect.GetY1(),
-            "length" : rect.GetX2() - rect.GetX1() ,
+            "length" : rect.GetX2() - rect.GetX1(),
             "height" : rect.GetY2() - rect.GetY1(),
         }
 
