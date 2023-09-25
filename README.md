@@ -213,3 +213,59 @@ Options:
 ```
 
 
+```
+ ] randeli augment --help
+Usage: randeli augment [OPTIONS]
+
+  Write an augmented PDF
+
+Options:
+  -i, --read PATH            Read PDF from PATH  [required]
+  --write PATH               Save augmented file to PATH
+  --write-into DIR           Save augmented file into DIR (same base filename
+                             as input)
+  --page INTEGER             Only analyse page PAGE
+  --ocr                      Enable OCR
+  --ocr-engine [apryse]      Select OCR Engine
+  --ocr-mode [page|element]  Select OCR Mode.
+  --ocr-dpi INTEGER          (expert) Tune resolution used in OCR word
+                             locations
+  --override KEY:VALUE       Override config values from CLI
+  --keep                     Keep intermediate OCR files
+  --pdfa                     Also write a PDF/A file
+  --hints                    Print additional help
+  --help                     Show this message and exit.
+```
+
+```
+ ] randeli inspect --help
+Usage: randeli inspect [OPTIONS]
+
+  Read a PDF and report on its structure
+
+Options:
+  -i, --read PATH       [required]
+  --fonts               Print per-element font details
+  --page NUMBER         Only inspect page NUMBER
+  --override KEY:VALUE  Override config values from CLI
+  --hints               Print additional help
+  --help                Show this message and exit.
+```
+
+```
+ ] map-fonts --help
+Usage: randeli map-fonts [OPTIONS]
+
+  Create fonts.map from installed fonts
+
+Options:
+  --font-map-file FILE     Save font mapping to FILE
+  --font-dir DIR           Parse fonts rooted at DIR  [required]
+  --fallback-font NAME     Font NAME if font can't be found mapping
+  --computer-modern ALIAS  Alias 'Computer Modern' to ALIAS
+  --update-config          Add specified font-map-file into configuration file
+  --alias ALIAS:FONTNAME   ALIAS aliased to 'FONTNAME'
+  --echo                   Display font names/styles
+  --hints
+  --help                   Show this message and exit.
+```
