@@ -10,6 +10,7 @@ class OpenDocument:
 @dataclass
 class BeginPage:
     document: object = None
+    page: object = None
     page_number: int = 0
     page_count: int = 0
     bbox: dict = field(default_factory=dict)

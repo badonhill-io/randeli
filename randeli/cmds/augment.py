@@ -47,6 +47,10 @@ BOOTSTRAP_KEYS={
         "type" : "str",
         "default" : "page"
     },
+    'ocr.forced' : {
+        "type" : "bool",
+        "default" : False
+    },
 }
 
 class EventHandler:
@@ -72,6 +76,42 @@ class EventHandler:
 
         LOGGER.notice(f"Page {msg.page_number} / {msg.page_count} {status}")
 
+        if self.ctx['ocr.forced'] is True:
+
+            # Process entire page
+            if self.ctx['page'] == 0 or self.ctx['page'] == msg.page_number:
+
+
+                jsn = self.backend.extractTextFromImage(msg,
+                                                        out_filename=self.ctx['write'],
+                                                        out_dir=self.ctx['augment.write-into'])
+
+                paragraphs = json.loads(jsn)
+
+                opts = {
+                    "box-color": self.policy.strong_box_color,
+                    "box-height" : self.policy.strong_box_height,
+                    "box-shape" : self.policy.strong_box_shape,
+                    "dpi" : paragraphs['Page'][0]["dpi"],
+                }
+
+                for p in paragraphs['Page'][0]['Para']:
+                    for l in p['Line']:
+                        for word_obj in l['Word']:
+
+                            if self.policy.shouldAugment(word_obj['text'],
+                                                         words_in_line=len(l['Word']),
+                                                         lines_in_para=len(p['Line'])):
+
+                                splits = self.policy.splitWord( word_obj['text'] )
+
+                                opts["box-width"] = float(len(splits.head) / len(word_obj['text']))
+
+                                box = self.backend.newBox( word_obj, style=opts)
+
+                                self.overlay_boxes.append( box )
+
+
 
     @FTRACE
     def endPageCB(self, msg : randeli.librandeli.notify.EndPage):
@@ -89,6 +129,12 @@ class EventHandler:
             if msg.writer:
                 DEVLOG.trace("Element on page not selected for modification")
                 self.backend.writeElement( msg.writer, msg.element )
+            return
+
+        if self.ctx['ocr.forced'] is True:
+            # just write out each element, augmentation is handled
+            # at the page level
+            self.backend.writeElement( msg.writer, msg.element )
             return
 
         if msg.ele_type_str == "text":
@@ -202,8 +248,8 @@ class EventHandler:
                             for word_obj in l['Word']:
 
                                 if self.policy.shouldAugment(word_obj['text'],
-                                                            words_in_line=len(l['Word']),
-                                                            lines_in_para=len(p['Line'])):
+                                                             words_in_line=len(l['Word']),
+                                                             lines_in_para=len(p['Line'])):
 
                                     splits = self.policy.splitWord( word_obj['text'] )
 
@@ -281,6 +327,12 @@ need to try a different DPI for the OCR mapping to page coordinates, i.e.
         default=BOOTSTRAP_KEYS['ocr.enabled']["default"],
         help="Enable OCR")
 @click.option(
+    '--force-ocr',
+        'force_ocr',
+        is_flag=True,
+        default=BOOTSTRAP_KEYS['ocr.forced']["default"],
+        help="Force (whole page) OCR even if there are text elements")
+@click.option(
     '--ocr-engine',
         'ocr_engine',
         type=click.Choice(["apryse"]),
@@ -325,7 +377,7 @@ need to try a different DPI for the OCR mapping to page coordinates, i.e.
         help="Print additional help"
 )
 @click.pass_context
-def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, ocr_dpi, override, keep_files, pdfa, hints ):
+def cli(ctx, read_, write_, write_dir_, page, enable_ocr, force_ocr, ocr_engine, ocr_mode, ocr_dpi, override, keep_files, pdfa, hints ):
     """Write an augmented PDF"""
 
     import randeli.librandeli.backend
@@ -337,6 +389,7 @@ def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, 
     ctx.obj['augment.keep-files'] = keep_files
 
     ctx.obj['ocr.enabled'] = enable_ocr
+    ctx.obj['ocr.forced'] = force_ocr
     ctx.obj['ocr.engine'] = ocr_engine
     ctx.obj['ocr.mode'] = ocr_mode
     ctx.obj['ocr.dpi'] = ocr_dpi
@@ -364,7 +417,7 @@ def cli(ctx, read_, write_, write_dir_, page, enable_ocr, ocr_engine, ocr_mode, 
     if ctx.obj['ocr.enabled'] is True and ctx.obj['ocr.engine'] == "apryse":
         options["apryse-ocr"] = True
 
-    if ctx.obj['ocr.mode'] == "page" :
+    if ctx.obj['ocr.mode'] == "page" or ctx.obj['ocr.forced'] is True:
 
         options["ocr-whole-page"] = True
     else:

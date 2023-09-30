@@ -6,7 +6,7 @@ THIS_SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && p
 SAMPLEDIR=${THIS_SCRIPT_DIR}/samples
 OUTDIR=${SAMPLEDIR}/augmented
 
-FONTMAP=${THIS_SCRIPT_DIR}/fonts.json
+FONTMAP=$(randeli config get --key=policy.font-map-file)
 
 if [ ! -r ${FONTMAP} ]
 then
@@ -45,7 +45,7 @@ function augment()
         # try this???
         if [ "${dir}" == "xelatex" ]
         then
-            args="--ocr --ocr-mode page"
+            args="--ocr --ocr-mode page --force-ocr --override policy.strong_box_height=0.6"
         fi
 
         echo randeli $ARGS augment --read $pdf --write ${OUTDIR}/$pdf $args

@@ -143,6 +143,7 @@ class Apryse(BaseDocument):
             }
 
             begin_page = notify.BeginPage(document=self.document,
+                                         page=page,
                                          page_count=self.page_count,
                                          page_number=self.page_number,
                                          bbox=bounding)
@@ -502,8 +503,12 @@ class Apryse(BaseDocument):
         if "box-height" in style:
             desc["height"] = style['box-height']
 
+
         if desc["height"] == 0:
             desc["height"] = obj["font-size"] * y_scale
+
+        if desc["height"] < 1.0:
+            desc["height"] = obj["font-size"] * y_scale * desc["height"]
 
         desc["x"] = ( ocr_scale * x_scale * obj['x'] ) + x_offset
         desc["y"] = ( ocr_scale * y_scale * obj['y'] ) + y_offset
