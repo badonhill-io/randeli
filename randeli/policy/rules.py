@@ -78,8 +78,8 @@ KEYS={
         "default" : "#01199330"
     },
     'policy.strong_box_height' : {
-        "type" : "int",
-        "default" : 0
+        "type" : "float",
+        "default" : 0.0
     },
     'policy.strong_box_shape' : {
         "type" : "str",
