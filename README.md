@@ -140,6 +140,7 @@ and `use_colored_text` to `True`.
 Getting Started
 ===============
 
+0) Install `randeli` and dependencies. Randeli has not been submitted to PyPi so for the time being, create a virtual-env and install requirements manually (`pip install -r requirements.txt ; pip install .`) 
 
 1) Create the inital configuration file and download required Apryse libraries
 
@@ -168,6 +169,11 @@ randeli config set --key policy.fallback-font --value "CMU Serif"
 randeli map-fonts --update-config
 ```
 
+5) Augment a PDF
+
+```
+% randeli augment --read=samples/pdflatex/simple.pdf --write-into=.
+```
 
 Randeli Usage
 =============
@@ -210,6 +216,7 @@ Options:
   --help                    Show this message and exit.
 ```
 
+### randeli bootstrap
 
 ```
  ] randeli bootstrap --help
@@ -222,6 +229,8 @@ Options:
   --help      Show this message and exit.
 ```
 
+
+### randeli augment
 
 ```
  ] randeli augment --help
@@ -247,6 +256,8 @@ Options:
   --help                     Show this message and exit.
 ```
 
+### randeli inpsect
+
 ```
  ] randeli inspect --help
 Usage: randeli inspect [OPTIONS]
@@ -262,6 +273,7 @@ Options:
   --help                Show this message and exit.
 ```
 
+### randeli map-fonts
 ```
  ] map-fonts --help
 Usage: randeli map-fonts [OPTIONS]
