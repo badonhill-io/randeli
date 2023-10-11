@@ -9,6 +9,29 @@ This is primarily targeted at processing academic papers and patents.
 Randeli is currently using the commercial Apryse PDF SDK, a license
 key is required. A free demo license is available at https://dev.apryse.com
 
+A couple of examples
+-------------------
+
+
+![US Patent original](./samples/3rdParty/uspto.8539484.pdf)
+
+![US Patent augmented using OCR](./samples/augmented/3rdParty/uspto.8539484.pdf)
+
+
+
+![Simple LaTeX document](./samples/pdflatex/paragraph.pdf)
+
+![Simple LaTeX document augmented](./samples/augmented/pdflatex/paragraph.pdf)
+
+
+
+![Third Party academic paper](samples/3rdParty/IoTSecurityPaperWF-IOT.pdf)
+
+![Third Party academic paper augmented](samples/augmented/3rdParty/IoTSecurityPaperWF-IOT.pdf)
+
+
+---
+
 
 Terminology
 -----------
