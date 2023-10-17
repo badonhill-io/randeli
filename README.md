@@ -12,22 +12,19 @@ key is required. A free demo license is available at https://dev.apryse.com
 A couple of examples
 -------------------
 
+### US Patent (uses OCR)
 
-![US Patent original](./samples/3rdParty/uspto.8539484.pdf)
+[![Patent](./samples/3rdParty/uspto.8539484.png0.png)](./samples/3rdParty/uspto.8539484.pdf)
 
-![US Patent augmented using OCR](./samples/augmented/3rdParty/uspto.8539484.pdf)
-
-
-
-![Simple LaTeX document](./samples/pdflatex/paragraph.pdf)
-
-![Simple LaTeX document augmented](./samples/augmented/pdflatex/paragraph.pdf)
+[![Patent (augmented)](./samples/augmented/3rdParty/uspto.8539484.augmented0.png)](./samples/augmented/3rdParty/uspto.8539484.pdf)
 
 
+### Academic Paper
 
-![Third Party academic paper](samples/3rdParty/IoTSecurityPaperWF-IOT.pdf)
+[![Academic Paper](samples/3rdParty/IoTSecurityPaperWF-IOT0.png)](samples/3rdParty/IoTSecurityPaperWF-IOT.pdf)
 
-![Third Party academic paper augmented](samples/augmented/3rdParty/IoTSecurityPaperWF-IOT.pdf)
+[![Augmented Paper (augmented)](samples/augmented/3rdParty/IoTSecurityPaperWF-IOT.augmented0.png)](samples/augmented/3rdParty/IoTSecurityPaperWF-IOT.pdf)
+
 
 
 ---
