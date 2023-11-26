@@ -2,6 +2,7 @@
 ---
 fontsize: 11pt
 geometry: a4paper
+title: Mixed Text and Image
 ...
 
 

@@ -231,7 +231,7 @@ class Apryse(BaseDocument):
 
         info = self.document.GetDocInfo()
         producer = info.GetProducer()
-        info.SetProducer(f"{producer} - Augmented using 'randeli' by Badon Hill Technologies Ltd.")
+        info.SetProducer(f"{producer} - Augmented using 'randeli' by Badon Hill Technologies Ltd. https://github.com/badonhill-io/randeli")
         d = APRYSE.Date()
         d.SetCurrentTime()
         info.SetModDate( d )
