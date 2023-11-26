@@ -261,7 +261,7 @@ class Rules:
             ret = False
 
         """All other combinations not marked up"""
-        LOGGER.detail(f"Augment '{word}' ? {ret} | {cls} {words_in_line} {lines_in_para}")
+        LOGGER.debug(f"Augment '{word}' ? {ret} | {cls} {words_in_line} {lines_in_para}")
         return ret
 
     def getStrongFontPath(self, base_font_name : str, italic : bool, size : int) -> str: 

@@ -2,6 +2,7 @@
 ---
 fontsize: 10pt
 geometry: a4paper
+title: Paragraph
 ...
 
 

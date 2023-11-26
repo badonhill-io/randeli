@@ -1,6 +1,7 @@
 ---
 fontsize: 12pt
 geometry: a4paper
+title: Bold Font
 header-includes: |
     \usepackage{multicol}
     \newcommand{\hideFromPandoc}[1]{#1}
@@ -11,7 +12,7 @@ header-includes: |
 ...
 
 *Lorem* ipsum dolor sit amet, consectetur adipiscing elit, sed do
-eiusmod tempor incididunt ut labore et dolore magna aliqua. Diam
+eiusmod **tempor** incididunt ut labore et dolore magna aliqua. Diam
 maecenas sed enim ut sem viverra aliquet eget sit. Sit amet consectetur
 adipiscing elit duis. Libero id faucibus nisl tincidunt eget nullam
 non nisi. Ante in nibh mauris cursus. Nunc scelerisque viverra
@@ -26,7 +27,7 @@ id semper risus in hendrerit gravida rutrum. Facilisis gravida neque
 convallis a. Turpis massa sed elementum tempus egestas sed sed risus
 pretium.
 
-Tempor nec feugiat nisl pretium fusce. Et ultrices neque ornare
+Tempor nec _feugiat_ nisl **pretium** fusce. Et ultrices neque ornare
 aenean. Condimentum mattis pellentesque id nibh tortor id aliquet.
 Nulla malesuada pellentesque elit eget gravida cum sociis natoque
 penatibus. Tincidunt ornare massa eget egestas purus viverra. Dui

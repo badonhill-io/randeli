@@ -26,6 +26,7 @@ dependencies = [
     , "fonttools"
     , "pydantic"
     , "urllib3"
+    , "bs4"
 ]
 dynamic = ["version"]
 
@@ -36,6 +37,8 @@ version = { file = "VERSION"}
 packages = [
     "randeli"
     , "randeli.cmds"
+    , "randeli.cmds.handlers"
+    , "randeli.cmds.handlers.augment"
     , "randeli.librandeli"
     , "randeli.librandeli.backend"
     , "randeli.policy"
