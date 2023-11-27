@@ -1,19 +1,12 @@
-import logging
 from pathlib import PosixPath
 
 import EventNotifier
 
-from .. import notify 
-from .. import trace 
-
-log_name = "r.l.b.base"
 
 class BaseDocument:
 
-    def __init__(self, options={}, log=log_name):
-        self._options = options
-
-        self._logger = logging.getLogger(log)
+    def __init__(self, options=None):
+        self._options = options or {}
 
         self.nc_ = EventNotifier.Notifier(["OpenDocument", "BeginPage", "EndPage", "ProcessElement"])
 
@@ -33,7 +26,7 @@ class BaseDocument:
     def processDocument(self):
         pass
 
-    def processPage(self):
+    def processPage(self, reader, writer, builder, current_page):
         pass
 
     def saveDocument(self, filename="", in_dir=""):
@@ -79,12 +72,12 @@ class BaseDocument:
 
     @property
     def save_file(self):
-        return str(self._save_file_name)
+        return self._save_file_name
 
     @save_file.setter
     def save_file(self, value):
         self._save_file_name = value
-   
+
     @property
     def document(self):
         return self._document
@@ -99,7 +92,7 @@ class BaseDocument:
 
     @logger.setter
     def logger(self, value):
-        self._logger = value    
+        self._logger = value
 
     @property
     def page_count(self):
@@ -108,7 +101,7 @@ class BaseDocument:
     @page_count.setter
     def page_count(self, value):
         self._page_count = value
-    
+
     @property
     def page_number(self):
         return self._page_number
@@ -116,7 +109,7 @@ class BaseDocument:
     @page_number.setter
     def page_number(self, value):
         self._page_number = value
-    
+
     @property
     def ele_index(self):
         """Element index on page"""
@@ -125,5 +118,3 @@ class BaseDocument:
     @ele_index.setter
     def ele_index(self, value):
         self._ele_index = value
-    
-    

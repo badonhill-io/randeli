@@ -1,16 +1,12 @@
-import logging
-import logging.config
-from bs4 import BeautifulSoup
-from bs4.diagnose import diagnose
-import bs4.element
 import copy
 
+import bs4.element
+import click
+from bs4 import BeautifulSoup
+
 import randeli
+from randeli import LOGGER
 
-from randeli.librandeli.trace import tracer as FTRACE
-
-LOGGER = logging.getLogger("r.cli.epub")
-DEVLOG = logging.getLogger("d.devel")
 
 class EPUBEventHandler:
 
@@ -24,7 +20,6 @@ class EPUBEventHandler:
         if ctx:
             self.policy.loadRulesFromDict( ctx )
 
-    @FTRACE
     def beginPageCB(self, msg : randeli.librandeli.notify.BeginPage):
 
         status = ""
@@ -32,13 +27,13 @@ class EPUBEventHandler:
         if self.ctx['page'] != 0 and self.ctx['page'] != msg.page_number:
             status = "(not selected for updating)"
 
-        LOGGER.notice(f"Page {msg.page_number} / {msg.page_count} {status}")
+        click.echo(f"Page {msg.page_number} / {msg.page_count} {status}")
 
-    @FTRACE
+        LOGGER.info(f"Page {msg.page_number} / {msg.page_count} {status}")
+
     def endPageCB(self, msg : randeli.librandeli.notify.EndPage):
         pass
 
-    @FTRACE
     def elementCB(self, msg : randeli.librandeli.notify.Element):
 
         if self.ctx['page'] == 0 or self.ctx['page'] == msg.page_number:

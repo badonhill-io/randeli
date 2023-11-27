@@ -1,43 +1,31 @@
-import os
-import sys
-import configobj
 import pathlib
-import json
-import string
-
-import logging
-import logging.config
 
 import click
 
 import randeli
-from randeli.librandeli.trace import tracer as FTRACE 
-
-LOGGER = logging.getLogger("r.cli")
-DEVLOG = logging.getLogger("d.devel")
+from randeli import LOGGER
 
 KEYS={
     'apryse.token' : "str",
 }
 
 def inspect_epub(ctx):
-    import randeli.librandeli.backend
+    from randeli.librandeli.backend import EPUB
 
     def beginSectionCB(msg:randeli.librandeli.notify.BeginPage):
-        LOGGER.notice(f"Page {msg.page_number} / {msg.page_count}")
-        LOGGER.detail(f"  src = {msg.page}")
+        click.echo(f"Page {msg.page_number} / {msg.page_count}")
+        LOGGER.debug(f"file = {msg.page}")
 
     def elementCB(msg:randeli.librandeli.notify.Element):
-        LOGGER.notice(f"    {msg.ele_idx} <{msg.ele_type_str}>")
-        # msg.element is a tuple of (parent_node,node) 
-        if msg.element[1].text and msg.element[1].text[0].isalpha():
-            LOGGER.detail(f"      {msg.element[1].text}")
+        LOGGER.debug(f"<{msg.ele_type_str}>")
+        for child in msg.element.contents:
+            LOGGER.debug(f"text={child}")
 
     options = {
     }
 
     try:
-        backend = randeli.librandeli.backend.EPUB(options)
+        backend = EPUB(options)
 
         backend.notificationCenter().subscribe("BeginPage", beginSectionCB)
         backend.notificationCenter().subscribe("ProcessElement", elementCB)
@@ -48,25 +36,23 @@ def inspect_epub(ctx):
 
         backend.finalise()
 
-    except Exception as ex:
-        LOGGER.exception(str(ex),exc_info=ex)
-    
+    except Exception as e:
+        LOGGER.exception(str(e))
+
 
 def inspect_pdf(ctx):
 
     # delay importing until needed in case the apryse sdk is not yet installed
     # i.e. pre-bootstrap
-    import randeli.librandeli.backend
+    from randeli.librandeli.backend import Apryse
 
-    @FTRACE
     def beginPageCB(msg:randeli.librandeli.notify.BeginPage):
 
         bbox = msg.bbox
 
-        LOGGER.notice(f"Page {msg.page_number} / {msg.page_count}")
-        LOGGER.detail(f"  Bounding Box {bbox['x1']},{bbox['y1']} {bbox['x2']},{bbox['y2']} )")
+        click.echo(f"Page {msg.page_number} / {msg.page_count}")
+        LOGGER.debug(f"Bounding Box {bbox['x1']},{bbox['y1']} {bbox['x2']},{bbox['y2']} )")
 
-    @FTRACE
     def elementCB(msg:randeli.librandeli.notify.Element):
 
         if ctx.obj['page'] != 0 and  ctx.obj['page'] != msg.page_number:
@@ -74,26 +60,25 @@ def inspect_pdf(ctx):
 
         bbox = msg.bbox
 
-        LOGGER.info(f"Element {msg.ele_idx} {msg.ele_type_str} ({msg.ele_type}) ( {bbox['x1']},{bbox['y1']} {bbox['x2']},{bbox['y2']} )")
+        LOGGER.debug(f"Element {msg.ele_idx} {msg.ele_type_str} ({msg.ele_type}) ( {bbox['x1']},{bbox['y1']} {bbox['x2']},{bbox['y2']} )")
 
         if msg.ele_type_str == "image":
             img = backend.getImageDetails(msg.element)
-            LOGGER.detail(f"  image details = {img}")
+            LOGGER.debug(f"image details = {img}")
 
         if msg.ele_type_str == "text":
             td = backend.getTextDetails(msg.element)
-            LOGGER.detail(f"  text = {td['text']}")
+            LOGGER.debug(f"text = {td['text']}")
             if ctx.obj['fonts']:
-                LOGGER.detail(f"  font = {td['font-family']} (type={td['font-type']})")
+                LOGGER.debug(f"font = {td['font-family']} (type={td['font-type']})")
 
-            pass
 
     options = {
         "apryse-token" : ctx.obj['apryse.token'],
     }
 
     try:
-        backend = randeli.librandeli.backend.Apryse(options)
+        backend = Apryse(options)
 
         backend.notificationCenter().subscribe("BeginPage", beginPageCB)
         backend.notificationCenter().subscribe("ProcessElement", elementCB)
@@ -105,7 +90,7 @@ def inspect_pdf(ctx):
         backend.finalise()
 
     except Exception as ex:
-        LOGGER.exception(str(ex),exc_info=ex)
+        LOGGER.exception( str(ex) )
 
 
 def print_long_help_and_exit(ctx, param, value):
@@ -176,4 +161,3 @@ def cli(ctx, read_, fonts, page, override, is_epub):
         inspect_pdf(ctx)
     else:
         raise Exception(f"Can't determine file type (PDF/EPUB) from filename '{read_}'")
-        

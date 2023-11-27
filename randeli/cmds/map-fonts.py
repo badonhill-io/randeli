@@ -1,23 +1,13 @@
-import os
-import sys
-import configobj
-import pathlib
 import json
+import os
+import pathlib
 import re
-
-import logging
-import logging.config
 
 import click
 
-import randeli
-from randeli.librandeli.trace import tracer as FTRACE 
+from randeli import LOGGER
+
 from .config import write_config_value_to_file
-
-logging.config.dictConfig( randeli.LOGGING )
-
-LOGGER = logging.getLogger("r.cli")
-DEVLOG = logging.getLogger("d.devel")
 
 darwin_font_paths=["/Library/Fonts/", "/System/Library/Fonts/", f'{os.environ.get("HOME", "")}/Library/Fonts']
 
@@ -126,13 +116,13 @@ def cli(ctx, font_file, font_dir, fallback_font, cm_alias, update_config, alias,
                         family_name = str( font['name'].getDebugName(1) )
                         style_name = str( font['name'].getDebugName(2) )
 
-                        # handle Latin Modern Roman which embeds the point size 
-                        # in the style, i.e. 
+                        # handle Latin Modern Roman which embeds the point size
+                        # in the style, i.e.
                         #   [LMRoman][10 Bold]
-                        # -> 
+                        # ->
                         #   [LMRoman10][Bold]
 
-                        match = re.search("(\d+) (.+)", style_name)
+                        match = re.search(r"(\d+) (.+)", style_name)
                         if match:
 
                             family_name = family_name + match.group(1)
@@ -164,7 +154,7 @@ def cli(ctx, font_file, font_dir, fallback_font, cm_alias, update_config, alias,
 
                 if alias not in fonts:
                     fonts[alias] = {}
-            
+
                 for style, path in styles.items():
                     fonts[alias][style] = path
 
@@ -181,7 +171,7 @@ def cli(ctx, font_file, font_dir, fallback_font, cm_alias, update_config, alias,
 
     with open( font_file, "w") as out:
 
-        LOGGER.notice(f"Writing font map to {font_file}")
+        LOGGER.info(f"Writing font map to {font_file}")
 
         json.dump(sorted_fonts, out, indent=2, sort_keys=True)
 
@@ -193,4 +183,3 @@ def cli(ctx, font_file, font_dir, fallback_font, cm_alias, update_config, alias,
 
         if fallback_font in sorted_fonts:
             click.echo( f"Updated fallback-font in configuration file to {write_config_value_to_file( 'policy.fallback-font', fallback_font, ctx.obj['global.cfg'])}" )
-

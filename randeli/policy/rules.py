@@ -1,16 +1,13 @@
 
-import logging
+import json
+import pprint
+import random
 import string
 from dataclasses import dataclass
-import random
-import json
+
 import pydantic
-import pprint
 
-from .. librandeli.trace import tracer as FTRACE
-
-LOGGER = logging.getLogger("r.l.p.rules")
-DEVLOG = logging.getLogger("d.devel")
+from randeli import LOGGER
 
 KEYS={
     'policy.box_x_scale' : {
@@ -227,26 +224,26 @@ class Rules:
 
 
         if cls.leading_alphabetic == 0:
-            """Does not start with letter -> False"""
+            # Does not start with letter -> False
             ret = False
         elif  cls.upper_case > 0 and cls.lower_case == 0 and cls.numeric > 0:
-            """Only upper-case letters and numbers -> False"""
+            # Only upper-case letters and numbers -> False
             # probably an ID of some sort
             ret = False
 
         else:
             if ( cls.upper_case + cls.lower_case ) > cls.numeric:
-                """More letters than numbers -> True"""
+                # More letters than numbers -> True
                 ret = True
 
             if ( cls.upper_case + cls.lower_case ) > cls.whitespace:
-                """More letters than whitespace -> True"""
+                # More letters than whitespace -> True
                 ret = True
             else:
                 ret = False
 
             if ( cls.upper_case + cls.lower_case ) > cls.punctuation:
-                """More letters than punctuation -> True"""
+                # More letters than punctuation -> True
                 ret = True
             else:
                 ret = False
@@ -260,11 +257,11 @@ class Rules:
         if lines_in_para > 0 and lines_in_para < self.min_lines_in_para:
             ret = False
 
-        """All other combinations not marked up"""
+        # All other combinations not marked up
         LOGGER.debug(f"Augment '{word}' ? {ret} | {cls} {words_in_line} {lines_in_para}")
         return ret
 
-    def getStrongFontPath(self, base_font_name : str, italic : bool, size : int) -> str: 
+    def getStrongFontPath(self, base_font_name : str, italic : bool, size : int) -> str:
         """Returns the path to the _strong_ version of base_font_name from the font-map
         or empty to disable font modification
         """
@@ -292,20 +289,20 @@ class Rules:
 
         if base_font_name in self.font_map:
             if fnt in self.font_map[base_font_name]:
-                DEVLOG.debug(f"Found base font {base_font_name} and {fnt} in mapping italic={italic}")
+                LOGGER.debug(f"Found base font {base_font_name} and {fnt} in mapping italic={italic}")
 
                 return self.font_map[base_font_name][fnt]
             else:
-                DEVLOG.debug(f"Could not find {fnt} in {base_font_name}")
+                LOGGER.debug(f"Could not find {fnt} in {base_font_name}")
 
-        DEVLOG.warn(f"Could not find {base_font_name} defaulting to {self.fallback_font} and {fnt}")
+        LOGGER.warning(f"Could not find {base_font_name} defaulting to {self.fallback_font} and {fnt}")
 
         return self.font_map[self.fallback_font][fnt]
 
     def getStrongFontSize(self, size):
         ### Return negitive number to disable modifying the font"""
         if self.use_strong_text is True:
-            DEVLOG.debug(f"Setting (strong) Font size to be {size} + {self.modify_strong_font_size}")
+            LOGGER.debug(f"Setting (strong) Font size to be {size} + {self.modify_strong_font_size}")
             return size + self.modify_strong_font_size
         else:
             return -1.0
@@ -330,9 +327,9 @@ class Rules:
 
         head_size = 0
         if len(word) > self.max_head_len:
-            head_size = random.randint(1, self.max_head_len)
+            head_size = random.randint(1, self.max_head_len) # nosec: B311
         else:
-            head_size = random.randint(1, len(word))
+            head_size = random.randint(1, len(word)) # nosec: B311
 
         return WordDetails( head = word[:head_size], tail = word[head_size:])
 
@@ -534,4 +531,3 @@ class Rules:
     @min_ocr_image_width.setter
     def min_ocr_image_width(self, value):
         self._min_ocr_image_width = value
-

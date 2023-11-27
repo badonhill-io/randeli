@@ -1,27 +1,22 @@
-import os
-import sys
-import configobj
+# Copyright (c) 2023 Richard Offer, All rights reserved.
+
 import pathlib
-import json
-import tempfile
 import platform
-import subprocess
-
-import logging
-import logging.config
-
+import subprocess  # nosec: B404
+import sys
+import tempfile
 import zipfile
-import requests
+
 import click
+import configobj
+import requests
 
 import randeli
-from randeli.cmds.config import write_config_value_to_file
-
+from randeli import LOGGER
 from randeli.cli import BOOTSTRAP_KEYS as CLI_KEYS
 from randeli.cmds.augment import BOOTSTRAP_KEYS as AUGMENT_KEYS
+from randeli.cmds.config import write_config_value_to_file
 
-LOGGER = logging.getLogger("r.cli")
-DEVLOG = logging.getLogger("d.devel")
 
 @click.command("bootstrap", short_help="Initialize randeli")
 @click.option('--download', is_flag=True, help="Download 3rd party components")
@@ -84,7 +79,7 @@ def cli(ctx, download):
                     config[s[0]][s[1]] = AUGMENT_KEYS[k]["default"]
 
         if config["apryse"].get("token", "") == "":
-            config['apryse']['token'] = "NOTSET"
+            config['apryse']['token'] = "NOTSET" # nosec: B105
 
         policy = randeli.policy.Rules()
         policy.saveRulesToDict(config)
@@ -95,12 +90,13 @@ def cli(ctx, download):
 
     else:
         click.echo("Configuration file exists, will not create it.")
+        LOGGER.info("Configuration file exists, will not create it.")
 
 
     if download:
 
         click.echo("Installing Apryse PDF SDK")
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'apryse_sdk', '--extra-index-url=https://pypi.apryse.com'])
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'apryse_sdk', '--extra-index-url=https://pypi.apryse.com']) # nosec: B603
 
         urls = {
             "Darwin" : "https://www.pdftron.com/downloads/OCRModuleMac.zip",
@@ -112,7 +108,7 @@ def cli(ctx, download):
 
                 click.echo(f"Downloading {platform.system()}")
 
-                r = requests.get(urls[platform.system()], stream=True)
+                r = requests.get(urls[platform.system()], stream=True) # nosec: B113
 
                 total_size = int(r.headers['Content-Length'])
 
@@ -140,5 +136,5 @@ def cli(ctx, download):
             write_config_value_to_file("ocr.libdir", str(ocrlibdir), str(cfg_path))
 
         else:
-            click.error(f"Unsupported platform '{platform.system()}")
-
+            click.error(f"Unsupported platform '{platform.system()}, please consider filing a bug.")
+            LOGGER.debug(f"Unsupported platform '{platform.system()}, please consider filing a bug.")

@@ -8,7 +8,7 @@ OUTDIR=${SAMPLEDIR}/augmented
 
 FONTMAP=$(randeli config get --key=policy.font-map-file)
 
-if [ ! -r ${FONTMAP} ]
+if [ ! -r "${FONTMAP}" ]
 then
     echo "Missing fonts.json. Have you generated it ? (i.e. randeli map-fonts)"
     exit 1
@@ -19,7 +19,7 @@ mkdir -p ${OUTDIR}
 ARGS="--font-map-file ${FONTMAP}"
 
 
-function augment()
+function augment_pdf()
 {
     dir=$1
 
@@ -36,7 +36,7 @@ function augment()
         then
             args="--ocr"
         fi
-        
+
         if [ "${base}" == "mixed.pdf" ]
         then
             args="--ocr --ocr-mode element --ocr-dpi 96"
@@ -57,13 +57,39 @@ function augment()
     done
 }
 
+function augment_epub()
+{
+    dir=$1
+    for epub in $dir/*.epub
+    do
+
+        echo "=> Augmenting $epub"
+
+        base=$(basename $epub)
+
+        args=""
+
+        echo randeli $ARGS augment --read $epub --write ${OUTDIR}/$epub $args
+        randeli $ARGS augment --read $epub --write ${OUTDIR}/$epub $args
+
+        echo "<="
+        echo ""
+
+    done
+}
+
 (
     cd ${SAMPLEDIR}
 
-    # xelatex is not working yet
     for dir in 3rdParty pdflatex xelatex
     do
         mkdir -p ${OUTDIR}/$dir
-        augment $dir
+        augment_pdf $dir
+    done
+
+    for dir in 3rdParty epub
+    do
+        mkdir -p ${OUTDIR}/$dir
+        augment_epub $dir
     done
 )
