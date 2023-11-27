@@ -1,22 +1,10 @@
-import os
-import sys
-import configobj
-import pathlib
-import json
-
-import logging
-import logging.config
 
 import click
+import configobj
 
-import randeli
-from randeli.librandeli.trace import tracer as FTRACE 
+from randeli import LOGGER
 
 configobj.DEFAULTSECT = "global"
-
-LOGGER = logging.getLogger("r.cli")
-DEVLOG = logging.getLogger("d.devel")
-
 
 def write_config_value_to_file(key, value, file):
     """Write a period-separated key and value to configuration file"""
@@ -74,9 +62,11 @@ def cli(ctx, key_, value_, verb, hints ):
                                      create_empty=True,
                                      write_empty_values=True)
 
-        for k,v in ctx.obj.items():
-            print(f"{k:>32} = {v}")
+        keys = list(ctx.obj.keys())
+        keys.sort()
+
+        for k in keys:
+            click.echo(f"{k:>32} = {ctx.obj[k]}")
 
     else:
         raise Exception(f"Unknown action '{verb}'")
-

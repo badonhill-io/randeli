@@ -1,12 +1,10 @@
-import logging
-import logging.config
+import json
+
+import click
 
 import randeli
+from randeli import LOGGER
 
-from randeli.librandeli.trace import tracer as FTRACE
-
-LOGGER = logging.getLogger("r.cli.pdf")
-DEVLOG = logging.getLogger("d.devel")
 
 class PDFEventHandler:
 
@@ -19,7 +17,6 @@ class PDFEventHandler:
         self.policy = randeli.policy.Rules()
         self.policy.loadRulesFromDict( ctx )
 
-    @FTRACE
     def beginPageCB(self, msg : randeli.librandeli.notify.BeginPage):
 
         status = ""
@@ -29,7 +26,8 @@ class PDFEventHandler:
         if self.ctx['page'] != 0 and self.ctx['page'] != msg.page_number:
             status = "(not selected for updating)"
 
-        LOGGER.notice(f"Page {msg.page_number} / {msg.page_count} {status}")
+        click.echo(f"Page {msg.page_number} / {msg.page_count} {status}")
+        LOGGER.debug(f"Page {msg.page_number} / {msg.page_count} {status}")
 
         if self.ctx['ocr.forced'] is True:
 
@@ -68,21 +66,19 @@ class PDFEventHandler:
 
 
 
-    @FTRACE
     def endPageCB(self, msg : randeli.librandeli.notify.EndPage):
 
         for box in self.overlay_boxes:
-            DEVLOG.detail(f"writing box @ {int(box['x'])},{int(box['y'])}")
-            DEVLOG.debug(f"  {box}")
+            LOGGER.debug(f"writing box @ {int(box['x'])},{int(box['y'])}")
+            LOGGER.debug(f"  {box}")
             self.backend.drawBox( msg.writer, msg.builder, box)
 
-    @FTRACE
     def elementCB(self, msg : randeli.librandeli.notify.Element):
 
         if self.ctx['page'] != 0 and self.ctx['page'] != msg.page_number:
             #just write out the unmodified object
             if msg.writer:
-                DEVLOG.trace("Element on page not selected for modification")
+                LOGGER.debug("Element on page not selected for modification")
                 self.backend.writeElement( msg.writer, msg.element )
             return
 
@@ -101,7 +97,7 @@ class PDFEventHandler:
             # close "enough" that they should be considered a single word
             # i.e. no augmentation in the second element.
 
-            DEVLOG.info(f"Processing '{td['text']}'")
+            LOGGER.debug(f"Processing '{td['text']}'")
 
             if self.policy.shouldAugment( td['text'] ):
                 LOGGER.debug(f"policy will markup {td['text']}")
@@ -134,9 +130,9 @@ class PDFEventHandler:
 
                     for t in tail_ele:
                         if t.GetType() == 3:
-                            DEVLOG.detail(f"tail {t.GetTextString()}")
+                            LOGGER.debug(f"tail {t.GetTextString()}")
                         else:
-                            DEVLOG.detail(f"tail {t.GetType()}")
+                            LOGGER.debug(f"tail {t.GetType()}")
 
                         self.backend.writeElement( msg.writer, t )
                 else:
@@ -220,8 +216,5 @@ class PDFEventHandler:
 
         else:
             # on the selected page, but not an element that needs to be augmented
-            DEVLOG.info(f"Not an element to be augmented ({msg.ele_type_str})")
+            LOGGER.debug(f"Not an element to be augmented ({msg.ele_type_str})")
             self.backend.writeElement( msg.writer, msg.element )
-
-
-

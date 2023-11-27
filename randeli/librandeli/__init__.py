@@ -1,6 +1,2 @@
-
-#from . import backend
+# pylint: disable-next=unused-import
 from . import notify
-
-from .logging import setup_extended_log_levels
-from .trace import tracer as FTRACE

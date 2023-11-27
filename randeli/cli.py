@@ -6,25 +6,17 @@
 
 
 import os
-import sys
-import configobj
 import pathlib
-import json
-import pydantic
-
-import logging
-import logging.config
+import sys
 
 import click
+import configobj
+import pydantic
 
 import randeli
+from randeli import LOGGER
 
 configobj.DEFAULTSECT = "global"
-randeli.librandeli.setup_extended_log_levels()
-logging.config.dictConfig( randeli.LOGGING )
-
-LOGGER = logging.getLogger("r.cli")
-DEVLOG = logging.getLogger("d.devel")
 
 TOPDIR = str(pathlib.PosixPath(randeli.__file__).parent)
 CFG = os.path.join(
@@ -48,7 +40,7 @@ BOOTSTRAP_KEYS = {
         "type" : "str",
         "default" : CFG
     },
-    'global.devel' : {
+    'global.debug' : {
         "type" : "bool",
         "default" : False
     },
@@ -93,9 +85,9 @@ class RandeliCLI(click.Group):
         type=int,
         help="Set system-wide verbosity")
 @click.option(
-    '--devel',
+    '--debug',
         is_flag=True,
-        help="Run in development mode (additional logging)")
+        help="Run in debug mode (additional logging)")
 @click.option(
     '--cfg',
         type=click.Path(),
@@ -108,24 +100,62 @@ class RandeliCLI(click.Group):
         default=BOOTSTRAP_KEYS['global.backend']["default"],
         help="Select backend PDF library")
 @click.option(
-    '--font-map-file', 
+    '--font-map-file',
         type=click.Path(),
         metavar="FILE",
         default=FONTMAP,
         help="Load font map from FILE"
         )
 @click.option(
-    '--log-level',
-        'log_level',
-        metavar="LOGGER=LEVEL",
-        help="Override logging level for given logger",
-        multiple=True)
+    '--enable-logger',
+        'logger_name',
+        type=click.Choice([
+            "randeli.cmds.augment",
+            "randeli.cmds.bootstrap",
+            "randeli.cmds.config",
+            "randeli.cmds.inspect",
+            "randeli.cmds.handlers.augment.epubeventhandler",
+            "randeli.cmds.handlers.augment.pdfeventhandler",
+            "randeli.librandeli.backend.apryse",
+            "randeli.librandeli.backend.base",
+            "randeli.librandeli.backend.epub",
+            "randeli.librandeli.notify",
+            "randeli.policy.rules",
+        ]),
+    metavar="LOGGER",
+    help="Enable (internal) logger",
+    multiple=True)
 @click.option(
     '--apryse-token',
         metavar="TOKEN",
         default="NOTSET",
         help="API Token for Apryse backend")
-def cli(ctx, verbose, devel, cfg, backend, font_map_file, log_level, apryse_token):
+def cli(ctx, verbose, debug, cfg, backend, font_map_file, logger_name, apryse_token):
+
+    LOGGER.enable("randeli.cli")
+
+    if debug is True:
+
+        LOGGER.add( "randeli.log", format= "{time:HH:mm:ss} | {name: >33} | {level: <7} | {file:>10}#{line:<3} | {message}", level="DEBUG")
+
+        LOGGER.enable("randeli.cli")
+        LOGGER.enable("randeli.cmds.augment")
+        LOGGER.enable("randeli.cmds.bootstrap")
+        LOGGER.enable("randeli.cmds.config")
+        LOGGER.enable("randeli.cmds.inspect")
+        LOGGER.enable("randeli.cmds.map-fonts")
+        LOGGER.enable("randeli.cmds.handlers.augment.epubeventhandler")
+        LOGGER.enable("randeli.cmds.handlers.augment.pdfeventhandler")
+        LOGGER.enable("randeli.librandeli.backend.apryse")
+        LOGGER.enable("randeli.librandeli.backend.base")
+        LOGGER.enable("randeli.librandeli.backend.epub")
+        LOGGER.enable("randeli.librandeli.notify")
+        LOGGER.enable("randeli.policy.rules")
+
+    for l in logger_name:
+        LOGGER.enable(l)
+
+    LOGGER.debug(f"Executing {' '.join(sys.argv)}")
 
     if ctx.invoked_subcommand is None:
 
@@ -134,7 +164,7 @@ def cli(ctx, verbose, devel, cfg, backend, font_map_file, log_level, apryse_toke
 
         click.echo("")
         click.echo("COMMANDS: ")
-        cmds = r.list_commands( ctx = ctx) 
+        cmds = r.list_commands( ctx = ctx)
         for c in cmds:
             name = c.replace('.py','')
             mod = __import__(f"randeli.cmds.{name}", None, None, ["cli"])
@@ -160,7 +190,7 @@ or
         for k,v in config.dict().items():
             for vv in v:
                 # parse booleans
-                if f"{k}.{vv}" in [ "global.devel", "ocr.enabled", "apryse.pdfa" ]:
+                if f"{k}.{vv}" in [ "global.debug", "ocr.enabled", "apryse.pdfa" ]:
                     ctx.obj[f"{k}.{vv}"] = pydantic.parse_obj_as(bool,v[vv])
                 else:
                     ctx.obj[f"{k}.{vv}"] = v[vv]
@@ -170,7 +200,7 @@ or
         else:
             ctx.obj['apryse.token'] = config["apryse"].get("token","")
 
-    ctx.obj['global.devel'] = devel
+    ctx.obj['global.debug'] = debug
 
     #if font_map_file:
     ctx.obj['policy.font-map-file'] = font_map_file
@@ -180,15 +210,7 @@ or
     if not font_path.exists():
         ctx.obj['policy.font-map-file'] = ""
 
-    if ctx.obj['global.devel'] is False:
-        # disable d.* logging
-        logging.getLogger("d.devel").setLevel("ERROR")
-        logging.getLogger("d.trace").setLevel("ERROR")
 
-    for kv in log_level:
-        s = kv.split("=")
-        logging.getLogger( s[0] ).setLevel( s[1] )
-        
     # overwrite with supplied configs
     if cfg:
         ctx.obj['global.cfg'] = cfg
@@ -198,5 +220,4 @@ or
 
 if __name__ == '__main__':
 
-    cli( obj={} )
-
+    cli( obj={} ) # pylint: disable=no-value-for-parameter

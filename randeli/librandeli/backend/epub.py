@@ -2,44 +2,31 @@
 # Copyright (c) 2023 Richard Offer. All rights reserved
 #
 # we have limited needs, and want to integrate into notify
-# support like PDF handler, so handle EPUB manually (its a zip file) 
+# support like PDF handler, so handle EPUB manually (its a zip file)
 #
-import logging
-import logging.config
-import tempfile
-import json
-import string
-import pydantic
-from io import BytesIO
-from bs4 import BeautifulSoup
 import zipfile
+from io import BytesIO
 
+from bs4 import BeautifulSoup
 
-from . import BaseDocument
+from randeli import LOGGER
+
 from .. import notify
-from .. trace import tracer as FTRACE
-
-log_name = "r.l.b.epub"
+from . import BaseDocument
 
 ELEMENTTYPES = {
 }
 
-LOGGER = logging.getLogger(log_name)
-DEVLOG = logging.getLogger("d.devel")
 
 class EPUB(BaseDocument):
-    def __init__(self, options={}, log=log_name):
+    def __init__(self, options=None):
         super().__init__(options=options)
 
         self._document = None
 
-        self.logger = logging.getLogger(log)
-        self.devlog = logging.getLogger("d.devel")
-
     def finalise(self):
         pass
 
-    @FTRACE
     def loadDocument(self, filename=""):
         super().loadDocument(filename)
 
@@ -50,7 +37,6 @@ class EPUB(BaseDocument):
         self.page_number = 0
 
 
-    @FTRACE
     def processDocument(self, read_only=True):
 
         # EPUB don't have page numbers because of reflow
@@ -75,16 +61,16 @@ class EPUB(BaseDocument):
                                          page_number=self.page_number,
                                          bbox=None)
 
-                self.logger.trace("Posting BeginPage notification")
+                LOGGER.debug("Posting BeginPage notification")
                 self.notificationCenter().raise_event("BeginPage", begin_page)
-    
+
                 self.processSection(chap, self.writer, None, self.page_number)
 
                 end_page = notify.EndPage(document=self.document,
                                           writer=self.writer,
                                           builder=None)
 
-                self.logger.trace("Posting EndPage notification")
+                LOGGER.debug("Posting EndPage notification")
                 self.notificationCenter().raise_event("EndPage", end_page)
 
             else:
@@ -99,9 +85,8 @@ class EPUB(BaseDocument):
                             self.writer.writestr( chap, file.read() )
 
 
-    @FTRACE
     def processSection(self, section, writer, builder, current_page):
-        super().processPage()
+        super().processPage(section, writer, builder, current_page)
 
         self.tree = None
 
@@ -128,21 +113,16 @@ class EPUB(BaseDocument):
                                      element=para,
                                      )
 
-                self.logger.info(f"  Posting element notification (p)")
+                LOGGER.debug(f"Posting element notification")
                 self.notificationCenter().raise_event("ProcessElement", element)
 
                 ele_idx += 1
 
             if self.writer:
                 self.writer.writestr( section, str(self.tree ) )
-        
-    @FTRACE
+
     def writeElement(self, element):
-        """
-        if parent is not None and element is not None:
-            LOGGER.info(f"Writing {element.tag} in {parent.tag}")
-            parent.append( element )
-        """
+        pass
 
     def update_metadata(self, metadata=b""):
 
@@ -160,7 +140,6 @@ class EPUB(BaseDocument):
         return str(tree)
 
 
-    @FTRACE
     def saveDocument(self, filename="", write_into="", pdfa=False):
 
 
@@ -173,5 +152,5 @@ class EPUB(BaseDocument):
             super().saveDocument(filename=filename, in_dir=write_into)
 
             open(self.save_file, 'wb').write(self.builder.getbuffer())
-        
-            self.logger.info(f"Saved to {self.save_file}")
+
+            LOGGER.success(f"Saved augmented variant of {self.read_file} to {self.save_file.resolve()}")

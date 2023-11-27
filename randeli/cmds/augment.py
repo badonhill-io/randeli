@@ -1,19 +1,10 @@
-import os
-import sys
-import configobj
-import pathlib
-import json
+# Copyright (c) 2023 Richard Offer, All rights reserved.
 
-import logging
-import logging.config
+import pathlib
 
 import click
 
-import randeli
-from randeli.librandeli.trace import tracer as FTRACE
-
-LOGGER = logging.getLogger("r.cli")
-DEVLOG = logging.getLogger("d.devel")
+from randeli import LOGGER
 
 # these get written during bootstrap
 BOOTSTRAP_KEYS={
@@ -56,8 +47,8 @@ BOOTSTRAP_KEYS={
 
 def augment_pdf(ctx):
 
-    from randeli.librandeli.backend import Apryse as BACKEND
     from randeli.cmds.handlers.augment import PDFEventHandler
+    from randeli.librandeli.backend import Apryse as BACKEND
 
     font_map = pathlib.PosixPath( ctx.obj['policy.font-map-file'] )
 
@@ -110,8 +101,8 @@ def augment_pdf(ctx):
 
 def augment_epub(ctx):
 
-    from randeli.librandeli.backend import EPUB as BACKEND
     from randeli.cmds.handlers.augment import EPUBEventHandler
+    from randeli.librandeli.backend import EPUB as BACKEND
 
     options = {
         "write-into" : ctx.obj['augment.write-into'],
@@ -284,4 +275,3 @@ def cli(ctx, read_, write_, write_dir_, page, enable_ocr, force_ocr, ocr_engine,
         augment_pdf(ctx)
     else:
         raise Exception(f"Can't determine file type (PDF/EPUB) from filename '{read_}'")
- 

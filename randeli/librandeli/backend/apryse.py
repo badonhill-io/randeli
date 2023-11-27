@@ -1,20 +1,14 @@
 
-import logging
-import logging.config
 import math
 import tempfile
-import json
-import string
-import pydantic
 from pathlib import PosixPath
 
 import apryse_sdk as APRYSE
 
-from . import BaseDocument
-from .. import notify
-from .. trace import tracer as FTRACE
+from randeli import LOGGER
 
-log_name = "r.l.b.apryse"
+from .. import notify
+from . import BaseDocument
 
 ELEMENTTYPES = {
         0 : "null",
@@ -34,25 +28,19 @@ ELEMENTTYPES = {
         14 : "marked-content-point",
 }
 
-LOGGER = logging.getLogger(log_name)
-DEVLOG = logging.getLogger("d.devel")
-
 class Apryse(BaseDocument):
 
-    def __init__(self, options={}, log=log_name):
+    def __init__(self, options=None):
         super().__init__(options=options)
 
         self._document = None
-
-        self.logger = logging.getLogger(log)
-        self.devlog = logging.getLogger("d.devel")
 
         self._ocr_options = None
 
         self.fonts = None
 
         if "apryse-token" not in self.options or self.options["apryse-token"] == "":
-            self.logger.fatal("Missing Apryse API key")
+            LOGGER.fatal("Missing Apryse API key")
             raise Exception("Missing Apryse API key")
 
         APRYSE.PDFNet.Initialize( self.options["apryse-token"] )
@@ -61,22 +49,22 @@ class Apryse(BaseDocument):
             if self.options.get("apryse-ocr", False) is True:
 
                 self._ocr_options = APRYSE.OCROptions()
-                self._ocr_options.SetUsePDFPageCoords(True);
-                self._ocr_options.AddDPI(options["dpi"]);
+                self._ocr_options.SetUsePDFPageCoords(True)
+                self._ocr_options.AddDPI(options["dpi"])
 
                 if self.options.get("apryse-libdir", ""):
 
                     self._ocrdir = self.options["apryse-libdir"]
 
                     APRYSE.PDFNet.AddResourceSearchPath(self._ocrdir)
-                    self.logger.info(f"OCR has been enabled")
-                    self.logger.debug(f" libdir = {self._ocrdir}")
+                    LOGGER.info(f"OCR has been enabled")
+                    LOGGER.debug(f" libdir = {self._ocrdir}")
 
                 else:
-                    self.logger.error("OCR has been requested, but no ocr.libdir is set")
+                    LOGGER.error("OCR has been requested, but no ocr.libdir is set")
 
         except Exception as e:
-            self.logger.error(str(e))
+            LOGGER.exception(str(e))
 
 
     def finalise(self):
@@ -86,7 +74,6 @@ class Apryse(BaseDocument):
         APRYSE.PDFNet.Terminate()
 
 
-    @FTRACE
     def loadDocument(self, filename=""):
         super().loadDocument(filename)
 
@@ -103,13 +90,12 @@ class Apryse(BaseDocument):
                                         filename=filename,
                                         page_count=self.document.GetPageCount())
 
-        self.logger.trace("Posting OpenDocument notification")
+        LOGGER.trace("Posting OpenDocument notification")
 
         self.notificationCenter().raise_event("OpenDocument", call_data)
 
-        self.logger.trace("Posted OpenDocument notification")
+        LOGGER.trace("Posted OpenDocument notification")
 
-    @FTRACE
     def processDocument(self, read_only=True):
 
         reader = APRYSE.ElementReader()
@@ -148,7 +134,7 @@ class Apryse(BaseDocument):
                                          page_number=self.page_number,
                                          bbox=bounding)
 
-            self.logger.trace("Posting BeginPage notification")
+            LOGGER.trace("Posting BeginPage notification")
             self.notificationCenter().raise_event("BeginPage", begin_page)
 
             # reset to zero on each page
@@ -158,7 +144,7 @@ class Apryse(BaseDocument):
 
             end_page = notify.EndPage(document=self.document, writer=writer, builder=builder)
 
-            self.logger.trace("Posting EndPage notification")
+            LOGGER.trace("Posting EndPage notification")
             self.notificationCenter().raise_event("EndPage", end_page)
 
             reader.End()
@@ -167,9 +153,8 @@ class Apryse(BaseDocument):
 
             itr.Next()
 
-    @FTRACE
     def processPage(self, reader, writer, builder, current_page):
-        super().processPage()
+        super().processPage(reader, writer, builder, current_page)
 
         page_elements = []
 
@@ -203,23 +188,20 @@ class Apryse(BaseDocument):
                                      element=ele,
                                      )
 
-            self.logger.trace("Posting Element notification")
+            LOGGER.trace("Posting Element notification")
             self.notificationCenter().raise_event("ProcessElement", element)
 
             ele = reader.Next()
 
-    @FTRACE
     def writeElement(self, writer, element):
         if writer and element:
             writer.WriteElement(element)
 
-    @FTRACE
     def writePlacedElement(self, writer, element):
         if writer and element:
             writer.WritePlacedElement(element)
             writer.Flush()
 
-    @FTRACE
     def saveDocument(self, filename="", write_into="", pdfa=False):
         # standardize generation of save pathname
 
@@ -236,46 +218,8 @@ class Apryse(BaseDocument):
         d.SetCurrentTime()
         info.SetModDate( d )
 
-
-        # WIP
-        # idea to improve missing font handling
-        # bypass font-subsets by creating new page that has all chars
-        # for each of the document fonts...
-        if False:
-
-            writer = APRYSE.ElementWriter()
-
-            # Start a new page ------------------------------------
-            page = self.document.PageCreate(APRYSE.Rect(0, 0, 595, 842))
-
-            writer.Begin(page)  # begin writing to the page
-
-            builder = APRYSE.ElementBuilder()
-
-            builder.Reset()
-        
-            element = builder.CreateTextBegin()
-            element.SetTextMatrix(1.5, 0, 0, 1.5, 50, 600)
-            element.GetGState().SetLeading(15)
-            writer.WriteElement(element)
-
-            for (sz,name),fnt in self.fonts.items():
-
-                element = builder.CreateTextRun(string.printable)
-                gs = element.GetGState()
-                gs.SetFont(fnt, sz)
-                writer.WriteElement(element)
-
-                writer.WriteElement(builder.CreateTextNewLine())
-                writer.WriteElement(builder.CreateTextNewLine())
-
-            writer.WriteElement(builder.CreateTextEnd())
-
-            writer.End()
-            self.document.PagePushBack(page)
-
-        self.document.Save(self.save_file, APRYSE.SDFDoc.e_remove_unused )
-        self.logger.info(f"Saved to {self.save_file}")
+        self.document.Save(str(self.save_file), APRYSE.SDFDoc.e_remove_unused )
+        LOGGER.success(f"Saved augmented variant of {self.read_file} to {self.save_file.resolve()}")
 
         if pdfa is True:
             pdfa_file = self.save_file.replace(".pdf", "_PDFA.pdf")
@@ -285,12 +229,13 @@ class Apryse(BaseDocument):
 
             pdf_a.SaveAs(pdfa_file , False)
 
-            self.logger.info(f"Saved PDF/A to {pdfa_file}")
+            LOGGER.success(f"Saved PDF/A to {pdfa_file}")
 
 
 
-    @FTRACE
-    def getImageDetails(self, ele) -> dict():
+    def getImageDetails(self, ele=None) -> dict():
+        if ele is None:
+            return {}
         rect = ele.GetBBox()
         h = ele.GetImageHeight()
         w = ele.GetImageWidth()
@@ -305,7 +250,6 @@ class Apryse(BaseDocument):
             }
         }
 
-    @FTRACE
     def getTextDetails(self, ele) -> dict():
         rect = ele.GetBBox()
         txt = ele.GetTextString()
@@ -320,7 +264,7 @@ class Apryse(BaseDocument):
         italic = fnt.IsItalic()
 
         if desc:
-            itr = desc.GetDictIterator();
+            itr = desc.GetDictIterator()
             while itr.HasNext():
                 key = itr.Key()
                 value = itr.Value()
@@ -342,13 +286,14 @@ class Apryse(BaseDocument):
             "height" : rect.GetY2() - rect.GetY1(),
         }
 
-    @FTRACE
-    def updateTextInElement(self, writer, ele, txt, style={}) -> object:
+    def updateTextInElement(self, writer, ele, txt, style=None) -> object:
         """TODO
         this currently only handles UTF-8 (i.e. pdflatex), it does not
         handle xelatex generated PDFs - the font mapping is different
         (simple vs complex fonts?)
         """
+
+        style = style or {}
 
         gs = ele.GetGState()
 
@@ -361,18 +306,18 @@ class Apryse(BaseDocument):
 
             if style['font-path'] and style['font-size'] > 0.0:
 
-                self.logger.debug(f"Using {style['font-path']}")
+                LOGGER.debug(f"Using {style['font-path']}")
 
                 fnt = APRYSE.Font.CreateTrueTypeFont(
                         self.document.GetSDFDoc(),
                         style["font-path"] )
 
 
-                self.devlog.debug(f"Using {style['font-path']} @ {style['font-size']} as strong")
+                LOGGER.debug(f"Using {style['font-path']} @ {style['font-size']} as strong")
                 gs.SetFont(fnt, style['font-size'])
 
             else:
-                self.logger.detail("No font specified in style")
+                LOGGER.detail("No font specified in style")
 
         if "text-color" in style and len(style['text-color']) > 6:
             # text-color is #rrggbbaa string, convert to 0.0->1.0
@@ -409,10 +354,11 @@ class Apryse(BaseDocument):
         return { "red" : r, "green" : g, "blue" :b, "alpha" : a }
 
 
-    @FTRACE
-    def newTextElements(self, src, builder, txt, style={}) -> list:
+    def newTextElements(self, src, builder, txt, style=None) -> list:
 
-        self.devlog.detail(style)
+        style = style or {}
+
+        LOGGER.debug(style)
 
         eles = []
 
@@ -426,13 +372,12 @@ class Apryse(BaseDocument):
         if "font-size" in style:
             font_size = style["font-size"]
 
-        self.devlog.debug(f"Using {style['font']} @ {style['font-size']}")
+        LOGGER.debug(f"Using {style['font'].GetName()} @ {style['font-size']}")
 
         eles.append( builder.CreateTextRun(txt, font, font_size ) )
 
         return eles
 
-    @FTRACE
     def drawBox(self, writer, builder, desc):
 
         box = builder.CreateRect(
@@ -452,15 +397,15 @@ class Apryse(BaseDocument):
         self.writePlacedElement( writer, box )
 
 
-    @FTRACE
-    def newBox(self, obj, style={}) -> dict:
+    def newBox(self, obj, style=None) -> dict:
 
         desc = {}
+        style = style or {}
 
         # obj is the demensions we get from OCR (needs DPI correction)
         # style is policy based
-        DEVLOG.info(f"Word @ {obj}")
-        DEVLOG.info(f"Style @ {style}")
+        LOGGER.info(f"Word @ {obj}")
+        LOGGER.info(f"Style @ {style}")
 
         desc["width"] = 0
         desc["height"] = 0
@@ -523,11 +468,10 @@ class Apryse(BaseDocument):
         if "box-color" in style:
             desc["rgb"] = self._txt_to_rgb(style['box-color'])
 
-        DEVLOG.info(f"Box @ {desc}")
+        LOGGER.info(f"Box @ {desc}")
 
         return desc
 
-    @FTRACE
     def extractTextFromImage(self, msg, out_filename="", out_dir="") -> str:
         """Returns JSON string containing nested objects
         {
