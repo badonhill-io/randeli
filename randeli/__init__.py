@@ -10,7 +10,7 @@ from . import cmds, librandeli, policy
 
 config = {
     "handlers": [
-        {"sink": sys.stdout, "format": "{time:HH:mm:ss} | {level: ^6} | {message}", "colorize":True, "level" : "SUCCESS" },
+        {"sink": sys.stderr, "format": "{time:HH:mm:ss} | {level: ^7} | {message}", "colorize":True, "level" : "SUCCESS" },
     ],
     "activation" : [
         ("randeli.cli", True),

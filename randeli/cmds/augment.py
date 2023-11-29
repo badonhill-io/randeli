@@ -53,7 +53,7 @@ def augment_pdf(ctx):
     font_map = pathlib.PosixPath( ctx.obj['policy.font-map-file'] )
 
     if not font_map.exists:
-        LOGGER.fatal(f"Could not open {str(font_map)}")
+        LOGGER.fatal(f"Could not open font-map file {str(font_map)}")
 
     options = {
         "apryse-token" : ctx.obj['apryse.token'],

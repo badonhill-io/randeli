@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 from randeli import LOGGER
 
 from .. import notify
-from . import BaseDocument
+from .base import BaseDocument
 
 ELEMENTTYPES = {
 }

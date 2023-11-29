@@ -1,6 +1,7 @@
 import json
 import os
 import pathlib
+import platform
 import re
 
 import click
@@ -10,12 +11,19 @@ from randeli import LOGGER
 from .config import write_config_value_to_file
 
 darwin_font_paths=["/Library/Fonts/", "/System/Library/Fonts/", f'{os.environ.get("HOME", "")}/Library/Fonts']
+linux_font_paths=["/usr/share/fonts/opentype", "/usr/share/fonts/truetype", "/usr/share/fonts/type1"]
+default_font_paths = None
+
+if platform.system() == "Darwin":
+    default_font_paths = darwin_font_paths
+elif platform.system() == "Linux":
+    default_font_paths = linux_font_paths
 
 def print_long_help_and_exit(ctx, param, value):
 
     if value is True:
 
-        font_dirs = "\n - ".join(darwin_font_paths)
+        font_dirs = "\n - ".join(default_font_paths)
 
         click.echo(f"""
 Build a font map from querying fonts in each FONTDIR
@@ -44,7 +52,7 @@ i.e. --alias 'LMRoman:Latin Modern'
         metavar="DIR",
         type=click.Path(exists=True),
         help="Parse fonts rooted at DIR",
-        default=darwin_font_paths,
+        default=default_font_paths,
         required=True,
         multiple=True)
 @click.option(
@@ -141,7 +149,7 @@ def cli(ctx, font_file, font_dir, fallback_font, cm_alias, update_config, alias,
                         fonts[ family_name ][ style_name ] = str(path_to_font)
 
                 else:
-                    LOGGER.warn(f"{path_to_font} is not a supported font type")
+                    LOGGER.warning(f"{path_to_font} is not a supported font type")
 
     for alias in aliases:
 

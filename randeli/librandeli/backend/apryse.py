@@ -8,7 +8,7 @@ import apryse_sdk as APRYSE
 from randeli import LOGGER
 
 from .. import notify
-from . import BaseDocument
+from .base import BaseDocument
 
 ELEMENTTYPES = {
         0 : "null",
@@ -40,7 +40,7 @@ class Apryse(BaseDocument):
         self.fonts = None
 
         if "apryse-token" not in self.options or self.options["apryse-token"] == "":
-            LOGGER.fatal("Missing Apryse API key")
+            LOGGER.critical("Missing Apryse API key")
             raise Exception("Missing Apryse API key")
 
         APRYSE.PDFNet.Initialize( self.options["apryse-token"] )
