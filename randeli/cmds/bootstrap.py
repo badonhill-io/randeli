@@ -4,6 +4,7 @@ import pathlib
 import platform
 import subprocess  # nosec: B404
 import sys
+import tarfile
 import tempfile
 import zipfile
 
@@ -20,8 +21,9 @@ from randeli.cmds.config import write_config_value_to_file
 
 @click.command("bootstrap", short_help="Initialize randeli")
 @click.option('--download', is_flag=True, help="Download 3rd party components")
+@click.option('--force', is_flag=True, help="Forcably update configuration file")
 @click.pass_context
-def cli(ctx, download):
+def cli(ctx, download, force):
     """Initialize randeli configuration"""
 
     ctx.ensure_object(dict)
@@ -31,7 +33,7 @@ def cli(ctx, download):
     ocrdir = pathlib.PosixPath(ctx.obj['global.top'],'ocr')
     ocrlibdir = ocrdir / "Lib"
 
-    if not cfg_path.exists():
+    if force or ( not cfg_path.exists() or ( cfg_path.exists() and cfg_path.stat().st_size == 0 ) ):
 
         config = configobj.ConfigObj(infile=None, write_empty_values=True, indent_type='  ')
         config.initial_comment = [
@@ -41,9 +43,9 @@ def cli(ctx, download):
             "# rather than edit this file directly, suggest using",
             "#   randeli config",
             "# i.e.",
-            "#   randeli config set apryse.token <API-TOKEN>"
-
+            "#   randeli config set --key=apryse.token --value=<API-TOKEN>"
         ]
+
         config["global"] = {}
         config["apryse"] = {}
         config["augment"] = {}
@@ -84,7 +86,11 @@ def cli(ctx, download):
         policy = randeli.policy.Rules()
         policy.saveRulesToDict(config)
 
+        if ocrlibdir.exists:
+            config["ocr"]["libdir"] = str(ocrlibdir)
+
         config.filename = cfg_path
+
 
         config.write()
 
@@ -100,6 +106,7 @@ def cli(ctx, download):
 
         urls = {
             "Darwin" : "https://www.pdftron.com/downloads/OCRModuleMac.zip",
+            "Linux" : "https://www.pdftron.com/downloads/OCRModuleLinux.tar.gz",
         }
 
         if platform.system() in urls:
@@ -126,8 +133,13 @@ def cli(ctx, download):
                 click.echo(f"Unpacking download")
                 # TODO change locations if permissions fail
 
-                with zipfile.ZipFile(fd, 'r') as zip:
-                    zip.extractall(path=str(ocrlibdir.parent))
+                if ".tar.gz" in urls[platform.system()]:
+                    tar = tarfile.open(fileobj=fd)
+                    tar.extractall(path=str(ocrlibdir.parent)) # nosec: B202
+                    tar.close()
+                else:
+                    with zipfile.ZipFile(fd, 'r') as zip:
+                        zip.extractall(path=str(ocrlibdir.parent)) # nosec: B202
 
             # reset permissions on module
             module = pathlib.PosixPath(ocrlibdir / "OCRModule")

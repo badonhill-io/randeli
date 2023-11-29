@@ -23,6 +23,14 @@ CFG = os.path.join(
         click.get_app_dir("randeli", force_posix=True),
         'config.ini')
 
+RANDELI_LOG = "randeli.log"
+
+if "RANDELI_CONFIG_PATH" in os.environ:
+    CFG = os.environ[ "RANDELI_CONFIG_PATH" ]
+
+if "RANDELI_LOG" in os.environ:
+    RANDELI_LOG = os.environ[ "RANDELI_LOG" ]
+
 FONTMAP = os.path.join(
         click.get_app_dir("randeli", force_posix=True),
         'fonts.json')
@@ -103,7 +111,6 @@ class RandeliCLI(click.Group):
     '--font-map-file',
         type=click.Path(),
         metavar="FILE",
-        default=FONTMAP,
         help="Load font map from FILE"
         )
 @click.option(
@@ -136,7 +143,15 @@ def cli(ctx, verbose, debug, cfg, backend, font_map_file, logger_name, apryse_to
 
     if debug is True:
 
-        LOGGER.add( "randeli.log", format= "{time:HH:mm:ss} | {name: >33} | {level: <7} | {file:>10}#{line:<3} | {message}", level="DEBUG")
+        def stderr_info_filter(record):
+            if record["extra"].get("info_only"):
+                return record["level"].no == logger.level("INFO").no
+            return True
+
+        # remove default (SUCCESS) logger, and re-install it at INFO level
+        LOGGER.remove()
+        LOGGER.add( RANDELI_LOG, format= "{time:HH:mm:ss} | {name: >33} | {level: <7} | {file:>10}#{line:<3} | {message}", level="DEBUG")
+        LOGGER.add( sys.stderr, format ="{time:HH:mm:ss} | {level: ^7} | {message}", colorize=True, level = "INFO" ),
 
         LOGGER.enable("randeli.cli")
         LOGGER.enable("randeli.cmds.augment")
@@ -184,7 +199,7 @@ or
     cfg_path = pathlib.Path(cfg)
 
     # load all values from ~/.randeli/config.ini into ctx
-    if cfg_path.exists():
+    if cfg_path.exists() and cfg_path.stat().st_size != 0:
         config = configobj.ConfigObj(infile=str(cfg_path), create_empty=True, write_empty_values=True)
 
         for k,v in config.dict().items():
@@ -202,14 +217,13 @@ or
 
     ctx.obj['global.debug'] = debug
 
-    #if font_map_file:
-    ctx.obj['policy.font-map-file'] = font_map_file
+    if font_map_file:
+        ctx.obj['policy.font-map-file'] = font_map_file
 
-    font_path = pathlib.Path(ctx.obj['policy.font-map-file'])
+        font_path = pathlib.Path(ctx.obj['policy.font-map-file'])
 
-    if not font_path.exists():
-        ctx.obj['policy.font-map-file'] = ""
-
+        if not font_path.exists():
+            ctx.obj['policy.font-map-file'] = ""
 
     # overwrite with supplied configs
     if cfg:

@@ -14,10 +14,10 @@ def inspect_epub(ctx):
 
     def beginSectionCB(msg:randeli.librandeli.notify.BeginPage):
         click.echo(f"Page {msg.page_number} / {msg.page_count}")
-        LOGGER.debug(f"file = {msg.page}")
+        LOGGER.success(f"file = {msg.page}")
 
     def elementCB(msg:randeli.librandeli.notify.Element):
-        LOGGER.debug(f"<{msg.ele_type_str}>")
+        LOGGER.success(f"<{msg.ele_type_str}>")
         for child in msg.element.contents:
             LOGGER.debug(f"text={child}")
 
@@ -51,7 +51,7 @@ def inspect_pdf(ctx):
         bbox = msg.bbox
 
         click.echo(f"Page {msg.page_number} / {msg.page_count}")
-        LOGGER.debug(f"Bounding Box {bbox['x1']},{bbox['y1']} {bbox['x2']},{bbox['y2']} )")
+        LOGGER.info(f"Bounding Box {bbox['x1']},{bbox['y1']} {bbox['x2']},{bbox['y2']} )")
 
     def elementCB(msg:randeli.librandeli.notify.Element):
 
@@ -60,15 +60,15 @@ def inspect_pdf(ctx):
 
         bbox = msg.bbox
 
-        LOGGER.debug(f"Element {msg.ele_idx} {msg.ele_type_str} ({msg.ele_type}) ( {bbox['x1']},{bbox['y1']} {bbox['x2']},{bbox['y2']} )")
+        LOGGER.success(f"Element {msg.ele_idx} {msg.ele_type_str} ({msg.ele_type}) ( {bbox['x1']},{bbox['y1']} {bbox['x2']},{bbox['y2']} )")
 
         if msg.ele_type_str == "image":
             img = backend.getImageDetails(msg.element)
-            LOGGER.debug(f"image details = {img}")
+            LOGGER.info(f"image details = {img}")
 
         if msg.ele_type_str == "text":
             td = backend.getTextDetails(msg.element)
-            LOGGER.debug(f"text = {td['text']}")
+            LOGGER.info(f"text = {td['text']}")
             if ctx.obj['fonts']:
                 LOGGER.debug(f"font = {td['font-family']} (type={td['font-type']})")
 
