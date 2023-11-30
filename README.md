@@ -15,23 +15,23 @@ A couple of examples
 
 ### US Patent (uses OCR)
 
-[![Patent](./samples/3rdParty/uspto.8539484.png0.png)](./samples/3rdParty/uspto.8539484.pdf)
+[![Patent](https://github.com/badonhill-io/randeli/blob/main/samples/3rdParty/uspto.8539484.png0.png)](https://github.com/badonhill-io/randeli/blob/main/samples/3rdParty/uspto.8539484.pdf)
 
-[![Patent (augmented)](./samples/augmented/3rdParty/uspto.8539484.augmented0.png)](./samples/augmented/3rdParty/uspto.8539484.pdf)
+[![Patent (augmented)](https://github.com/badonhill-io/randeli/blob/main/samples/augmented/3rdParty/uspto.8539484.augmented0.png)](https://github.com/badonhill-io/randeli/blob/main/samples/augmented/3rdParty/uspto.8539484.pdf)
 
 
 ### Academic Paper
 
-[![Academic Paper](samples/3rdParty/IoTSecurityPaperWF-IOT0.png)](samples/3rdParty/IoTSecurityPaperWF-IOT.pdf)
+[![Academic Paper](https://github.com/badonhill-io/randeli/blob/main/samples/3rdParty/IoTSecurityPaperWF-IOT0.png)](https://github.com/badonhill-io/randeli/blob/main/samples/3rdParty/IoTSecurityPaperWF-IOT.pdf)
 
-[![Augmented Paper (augmented)](samples/augmented/3rdParty/IoTSecurityPaperWF-IOT.augmented0.png)](samples/augmented/3rdParty/IoTSecurityPaperWF-IOT.pdf)
+[![Augmented Paper (augmented)](https://github.com/badonhill-io/randeli/blob/main/samples/augmented/3rdParty/IoTSecurityPaperWF-IOT.augmented0.png)](https://github.com/badonhill-io/randeli/blob/main/samples/augmented/3rdParty/IoTSecurityPaperWF-IOT.pdf)
 
 
 ### A complete e-book (EPUB)
 
-[![EPUB](samples/3rdParty/pythonlearn0.png)](samples/3rdParty/pythonlearn.epub)
+[![EPUB](https://github.com/badonhill-io/randeli/blob/main/samples/3rdParty/pythonlearn0.png)](samples/3rdParty/pythonlearn.epub)
 
-[![EPUB (augmented)](samples/augmented/3rdParty/pythonlearn.augmented0.png)](samples/augmented/3rdParty/pythonlearn.epub)
+[![EPUB (augmented)](https://github.com/badonhill-io/randeli/blob/main/samples/augmented/3rdParty/pythonlearn.augmented0.png)](samples/augmented/3rdParty/pythonlearn.epub)
 
 ---
 
@@ -64,7 +64,7 @@ An EPUB can be augmented using both bold fonts (aka "strong-text") and/or colore
 Getting Started
 ===============
 
-0) Install `randeli` and dependencies. Randeli has not (yet) been submitted to PyPi so for the time being, create a virtual-env and install requirements manually (`python -m build `), or you can build and run it via Docker.
+0) Install `randeli` and dependencies. `pip install randeli` should work or you can build a Docker image (`./scripts/build-image.sh`)
 
 1) Create the inital configuration file and download required Apryse libraries
 
@@ -76,7 +76,7 @@ randeli bootstrap --download
 parsing library. Visit https://dev.apryse.com/ to get a key
 
 ```
-randeli config set --key apryse.token --value "demo:1684698886167:....."
+randeli config set --key apryse.token --value "demo:16XXXXXXXX67:....."
 ```
 
 3) (optional) Set your preferred fallback font.
@@ -93,11 +93,17 @@ randeli config set --key policy.fallback-font --value "CMU Serif"
 randeli map-fonts --update-config
 ```
 
-5) Augment a PDF or EPUB
+5) Augment a PDF or EPUB, repeat
 
 ```
-% randeli augment --read=samples/pdflatex/simple.pdf --write-into=.
+% randeli augment --read=samples/pdflatex/simple.pdf --write-into=DIR
 ```
+
+Using `write-into` will save the augmented file (PDF or EPUB) into DIR with the same name as the specified input file (i.e. DIR/simple.pdf). It should not allow you to overwrite the input file.
+
+6) Open the augmented file using you normal viewer (i.e. Preview or Books on macOS)
+
+
 
 Randeli Usage
 =============
@@ -110,10 +116,10 @@ Options:
   --help  Show this message and exit.
 
 COMMANDS:
-     augment - Write an augmented PDF
+     augment - Write an augmented PDF/EPUB
    bootstrap - Initialize randeli configuration
       config - Read and Write configuration values
-     inspect - Read a PDF and report on its structure
+     inspect - Read a PDF or EPUB and report on its structure
    map-fonts - Create fonts.map from installed fonts
 
 For additional help on a command use
@@ -256,6 +262,12 @@ container, which will be out of date and not have a valid Apryse
 token.
 
 
+Map the appropriate host directores to `/IN` and `/OUT`, i.e. 
+
+```
+docker run -it --rm -v (pwd)/cfg:/CFG -v (pwd)/samples/:/IN:ro -v (pwd)/out:/OUT  randeli augment --read=/IN/pdflatex/simple.pdf --write-into /OUT
+```
+
 Samples
 =======
 
@@ -275,10 +287,11 @@ Augmenting Patents
 
 PDFs downloaded from http://patents.google.com may have alreay been
 regnerated compared to the original national patent office (i.e.
-USPTO).
+USPTO) and the augmentation isn't very good.
 
-More success has been obtained using PDFs downloaded indirectly from USPTO
-and using `randeli's` built-in OCR.
+Better success has been obtained using PDFs downloaded directly from USPTO
+and using `randeli's` built-in OCR, see
+samples/augmented/3rdParty/uspto.8539484.pdf as an example.
 
 
 :::
@@ -353,6 +366,12 @@ https://www.fontsquirrel.com/fonts/computer-modern
 
 Another good set is the "Latin Modern Roman" fonts.
 
-If you find the augmented files have a number of missing bold
-characters, then you could try setting `use_strong_text` to `False`
+While `randeli` tries its best at updating the fonts in an existing
+PDF, it is not perfect and can be visually unpleasing in edge cases
+(bolded characters are slight larger than their normal counterparts
+so text can run together). If you fond that's the case the suggestion
+is try setting `use_strong_text` to `False`
 and `use_colored_text` to `True`.
+
+EPUB documents should not be impacted as they typically use standard
+HTML fonts.
