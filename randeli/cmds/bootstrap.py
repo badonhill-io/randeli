@@ -28,9 +28,9 @@ def cli(ctx, download, force):
 
     ctx.ensure_object(dict)
 
-    cfg_path = pathlib.PosixPath(ctx.obj['global.cfg'])
+    cfg_path = pathlib.Path(ctx.obj['global.cfg'])
 
-    ocrdir = pathlib.PosixPath(ctx.obj['global.top'],'ocr')
+    ocrdir = pathlib.Path(ctx.obj['global.top'],'ocr')
     ocrlibdir = ocrdir / "Lib"
 
     if force or ( not cfg_path.exists() or ( cfg_path.exists() and cfg_path.stat().st_size == 0 ) ):
@@ -92,6 +92,8 @@ def cli(ctx, download, force):
         config.filename = cfg_path
 
 
+        cfg_path.parent.mkdir(parents=True)
+
         config.write()
 
     else:
@@ -105,6 +107,7 @@ def cli(ctx, download, force):
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'apryse_sdk', '--extra-index-url=https://pypi.apryse.com']) # nosec: B603
 
         urls = {
+            "Windows" : "https://www.pdftron.com/downloads/OCRModuleWindows.zip",
             "Darwin" : "https://www.pdftron.com/downloads/OCRModuleMac.zip",
             "Linux" : "https://www.pdftron.com/downloads/OCRModuleLinux.tar.gz",
         }
@@ -142,11 +145,12 @@ def cli(ctx, download, force):
                         zip.extractall(path=str(ocrlibdir.parent)) # nosec: B202
 
             # reset permissions on module
-            module = pathlib.PosixPath(ocrlibdir / "OCRModule")
-            module.chmod(0o755)
+            module = pathlib.Path(ocrlibdir / "OCRModule")
+            if platform.system() != "Windows":
+                module.chmod(0o755)
 
             write_config_value_to_file("ocr.libdir", str(ocrlibdir), str(cfg_path))
 
         else:
-            click.error(f"Unsupported platform '{platform.system()}, please consider filing a bug.")
+            click.echo(f"Unsupported platform '{platform.system()}, please consider filing a bug.")
             LOGGER.debug(f"Unsupported platform '{platform.system()}, please consider filing a bug.")

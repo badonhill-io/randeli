@@ -18,7 +18,7 @@ from randeli import LOGGER
 
 configobj.DEFAULTSECT = "global"
 
-TOPDIR = str(pathlib.PosixPath(randeli.__file__).parent)
+TOPDIR = str(pathlib.Path(randeli.__file__).parent)
 CFG = os.path.join(
         click.get_app_dir("randeli", force_posix=True),
         'config.ini')
@@ -194,7 +194,7 @@ or
 
     ctx.ensure_object(dict)
 
-    ctx.obj['global.top'] = str(pathlib.PosixPath(randeli.__file__).parent)
+    ctx.obj['global.top'] = str(pathlib.Path(randeli.__file__).parent)
 
     cfg_path = pathlib.Path(cfg)
 

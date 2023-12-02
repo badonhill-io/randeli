@@ -50,7 +50,7 @@ def augment_pdf(ctx):
     from randeli.cmds.handlers.augment import PDFEventHandler
     from randeli.librandeli.backend import Apryse as BACKEND
 
-    font_map = pathlib.PosixPath( ctx.obj['policy.font-map-file'] )
+    font_map = pathlib.Path( ctx.obj['policy.font-map-file'] )
 
     if not font_map.exists:
         LOGGER.fatal(f"Could not open font-map file {str(font_map)}")

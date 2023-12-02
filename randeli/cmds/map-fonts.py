@@ -10,14 +10,14 @@ from randeli import LOGGER
 
 from .config import write_config_value_to_file
 
-darwin_font_paths=["/Library/Fonts/", "/System/Library/Fonts/", f'{os.environ.get("HOME", "")}/Library/Fonts']
-linux_font_paths=["/usr/share/fonts/opentype", "/usr/share/fonts/truetype", "/usr/share/fonts/type1"]
-default_font_paths = None
+system_font_paths = {
+    "Darwin" : ["/Library/Fonts/", "/System/Library/Fonts/", f'{os.environ.get("HOME", "")}/Library/Fonts'],
+    "Linux" : ["/usr/share/fonts/opentype", "/usr/share/fonts/truetype", "/usr/share/fonts/type1"],
+    "Windows" : [ "c:/Windows/fonts" ]
+}
 
-if platform.system() == "Darwin":
-    default_font_paths = darwin_font_paths
-elif platform.system() == "Linux":
-    default_font_paths = linux_font_paths
+default_font_paths = system_font_paths[ platform.system() ]
+
 
 def print_long_help_and_exit(ctx, param, value):
 
@@ -111,9 +111,9 @@ def cli(ctx, font_file, font_dir, fallback_font, cm_alias, update_config, alias,
         for root, dirs, files in os.walk(dir_):
             for filename in files:
 
-                path_to_font = pathlib.PurePosixPath(root, filename)
+                path_to_font = pathlib.PurePath(root, filename)
 
-                if path_to_font.suffix in [".ttf", ".otf", ".ttc" ]:
+                if path_to_font.suffix.lower() in [".ttf", ".otf", ".ttc" ]:
                     try:
                         font_list = [ ttLib.TTFont(str(path_to_font)) ]
                     except ttLib.TTLibFileIsCollectionError:
@@ -175,7 +175,7 @@ def cli(ctx, font_file, font_dir, fallback_font, cm_alias, update_config, alias,
                 yield f"  {style}\n"
 
     if echo is True:
-        click.echo_via_pager(_print_fonts())
+        click.echo(_print_fonts())
 
     with open( font_file, "w") as out:
 
@@ -185,7 +185,7 @@ def cli(ctx, font_file, font_dir, fallback_font, cm_alias, update_config, alias,
 
     if update_config is True:
 
-        abs_font_file = pathlib.PosixPath(font_file).absolute()
+        abs_font_file = pathlib.Path(font_file).absolute()
 
         click.echo( f"Updated font-map in configuration file to {write_config_value_to_file( 'policy.font-map-file', str(abs_font_file), ctx.obj['global.cfg'])}" )
 

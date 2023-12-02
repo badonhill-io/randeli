@@ -1,4 +1,4 @@
-from pathlib import PosixPath
+import pathlib
 
 import EventNotifier
 
@@ -31,13 +31,13 @@ class BaseDocument:
 
     def saveDocument(self, filename="", in_dir=""):
 
-        self.save_file = PosixPath(self.read_file).name
+        self.save_file = pathlib.Path(self.read_file).name
 
         if in_dir:
-            self.save_file = PosixPath(in_dir, self.save_file)
+            self.save_file = pathlib.Path(in_dir, self.save_file)
 
         if filename:
-            self.save_file = PosixPath(filename)
+            self.save_file = pathlib.Path(filename)
 
         if self.save_file == self.read_file:
             raise Exception("Output file cannot be the same as the input filename")
@@ -68,7 +68,7 @@ class BaseDocument:
 
     @read_file.setter
     def read_file(self, value):
-        self._read_file = PosixPath(value)
+        self._read_file = pathlib.Path(value)
 
     @property
     def save_file(self):

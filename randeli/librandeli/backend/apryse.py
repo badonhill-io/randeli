@@ -1,7 +1,7 @@
 
 import math
 import tempfile
-from pathlib import PosixPath
+from pathlib import Path
 
 import apryse_sdk as APRYSE
 
@@ -567,12 +567,12 @@ class Apryse(BaseDocument):
 
         else:
 
-            base = PosixPath(self.read_file).name
+            base = Path(self.read_file).name
 
             if out_dir:
-                base = PosixPath(out_dir, base)
+                base = Path(out_dir, base)
             if out_filename:
-                base = PosixPath(out_filename)
+                base = Path(out_filename)
 
             png = f"{base}.{msg.page_number}-{msg.ele_idx}.png"
 

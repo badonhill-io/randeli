@@ -17,7 +17,7 @@ def inspect_epub(ctx):
         LOGGER.success(f"file = {msg.page}")
 
     def elementCB(msg:randeli.librandeli.notify.Element):
-        LOGGER.success(f"<{msg.ele_type_str}>")
+        LOGGER.info(f"<{msg.ele_type_str}>")
         for child in msg.element.contents:
             LOGGER.debug(f"text={child}")
 
