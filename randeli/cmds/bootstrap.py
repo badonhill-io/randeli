@@ -92,7 +92,7 @@ def cli(ctx, download, force):
         config.filename = cfg_path
 
 
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
 
         config.write()
 
